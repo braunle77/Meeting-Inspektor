@@ -1,644 +1,627 @@
 """
-visualize_leitmet.py
-Erzeugt das interaktive HTML-Dashboard aus leitmet_clean.json
-
-Aufruf:
-    python3 visualize_leitmet.py
+visualize_leitmet.py – v2
+Interaktives HTML-Dashboard mit Findings-Tab, Person-Filter und überarbeitetem UX
 """
 
-import json
-import math
-import re
+import json, re
 from pathlib import Path
-from collections import Counter, defaultdict
-
+from collections import defaultdict
 import networkx as nx
 import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
 import plotly.io as pio
 
 INPUT  = Path(__file__).parent / "leitmet_clean.json"
 OUTPUT = Path(__file__).parent / "leitmet_dashboard.html"
 
-# ---------------------------------------------------------------------------
-# Farben
-# ---------------------------------------------------------------------------
-ABT_FARBEN = {
-    "PC":        "#1f77b4",
-    "PCO":       "#ff7f0e",
-    "PCT":       "#2ca02c",
-    "PCTAC/DC":  "#17becf",
-    "PCTProduct":"#bcbd22",
-    "PCTDC":     "#9467bd",
-    "PCC":       "#d62728",
-    "PCS":       "#8c564b",
-    "unbekannt": "#7f7f7f",
+# ── Personen-Mapping ────────────────────────────────────────────────────────
+PERSON_ABT = {
+    "Jco":"PC","MiG":"PC","Ktz":"PC","Lav":"PC","Rls":"PC",
+    "Sez":"PC","Bre":"PC","DrS":"PC","Zeller":"PC",
+    "Beb":"PCO","Ipa":"PCO","Fln":"PCO","Zes":"PCO","LeB":"PCO",
+    "Kip":"PCT","Kis":"PCT","Rre":"PCT","Lic":"PCT","Leo":"PCT","Gam":"PCT","Ran":"PCT",
+    "Krö":"PCT","Dem":"PCT","Bas":"PCT","CST":"PCT",
+    "Dni":"PCT","Bra":"PCT","Fef":"PCT","FMD":"PCT","Wud":"PCT","Kih":"PCT","HeT":"PCT",
+    "TOK":"PCC","ADA":"PCC","JFR":"PCC","SMI":"PCC","MGR":"PCC","MOS":"PCC","AWA":"PCC",
+    "Urk":"PCS","Zrb":"PCS","Smt":"PCS","KTF":"PCS","Arg":"PCS","Lke":"PCS","Tih":"PCS","Laa":"PCS",
 }
-KAT_FARBEN = {
-    "Jour Fixe":           "#4e79a7",
-    "Einzelgespräch":      "#f28e2b",
-    "Teammeeting":         "#59a14f",
-    "Regeltermin / Review":"#e15759",
-    "Sprint Review":       "#76b7b2",
-    "Weekly / Update":     "#edc948",
-    "Sitzung":             "#b07aa1",
-    "Sonstiges":           "#aecde8",
+PERSON_SUBTEAM = {
+    "Kis":"AC","Rre":"AC","Lic":"AC","Leo":"AC","Gam":"AC","Ran":"AC",
+    "Krö":"DC","Dem":"DC","Bas":"DC","CST":"DC",
+    "Dni":"PC Products","Bra":"PC Products","Fef":"PC Products",
+    "FMD":"PC Products","Wud":"PC Products","Kih":"PC Products","HeT":"PC Products",
+    "Kip":"PCT Leitung",
+}
+FK_LIST = ["Jco","MiG","Ktz","Beb","TOK","Urk","Kip","Kis","Krö"]
+
+ABT_FARBEN = {
+    "PC":"#2563eb","PCO":"#f59e0b","PCT":"#16a34a",
+    "PCC":"#dc2626","PCS":"#7c3aed","unbekannt":"#9ca3af",
 }
 RHY_FARBEN = {
-    "täglich":         "#d62728",
-    "wöchentlich":     "#1f77b4",
-    "dreiwöchentlich": "#17becf",
-    "zweiwöchentlich": "#2ca02c",
-    "monatlich":       "#ff7f0e",
-    "quartalsweise":   "#9467bd",
-    "variabel":        "#7f7f7f",
+    "täglich":"#dc2626","wöchentlich":"#2563eb","dreiwöchentlich":"#0891b2",
+    "zweiwöchentlich":"#16a34a","monatlich":"#f59e0b","quartalsweise":"#7c3aed","variabel":"#9ca3af",
 }
-FREQ_GEWICHT = {
-    "täglich": 5, "wöchentlich": 4, "dreiwöchentlich": 3,
-    "zweiwöchentlich": 2, "monatlich": 1, "quartalsweise": 0.5, "variabel": 0.5,
-}
+FREQ_W = {"täglich":5,"wöchentlich":4,"dreiwöchentlich":3,
+          "zweiwöchentlich":2,"monatlich":1,"quartalsweise":0.5,"variabel":0.5}
 
-# ---------------------------------------------------------------------------
-# Daten laden
-# ---------------------------------------------------------------------------
+# ── Daten ────────────────────────────────────────────────────────────────────
 with open(INPUT, encoding="utf-8") as f:
     meetings = json.load(f)
-
 aktive = [m for m in meetings if m["status"] == "Aktiv"]
 
-# ---------------------------------------------------------------------------
-# Hilfsfunktion: Plotly-Figure → HTML-div (ohne plotly.js)
-# ---------------------------------------------------------------------------
-def fig_to_div(fig):
+def fig_div(fig):
     return pio.to_html(fig, full_html=False, include_plotlyjs=False,
-                       config={"displayModeBar": True, "responsive": True})
+                       config={"responsive":True,"displayModeBar":True})
 
-# ===========================================================================
-# VIEW 1: Netzwerk-Diagramm
-# ===========================================================================
+# ── VIEW 1: Netzwerk ─────────────────────────────────────────────────────────
 def build_network():
     G = nx.Graph()
-
-    # Personen-Knoten
-    alle_personen = set()
     for m in aktive:
         for t in m["teilnehmer"]:
-            alle_personen.add(t)
-
-    for p in alle_personen:
-        G.add_node(p)
-
-    # Kanten: je Meeting eine Kante zwischen allen Teilnehmerpaaren
+            if t in PERSON_ABT:
+                G.add_node(t)
     for m in aktive:
-        t = [x for x in m["teilnehmer"] if x in alle_personen]
-        gewicht = FREQ_GEWICHT.get(m["rhythmus_klasse"], 0.5)
-        for i in range(len(t)):
-            for j in range(i + 1, len(t)):
-                a, b = t[i], t[j]
-                if G.has_edge(a, b):
-                    G[a][b]["weight"] += gewicht
+        knoten = [t for t in m["teilnehmer"] if t in PERSON_ABT]
+        w = FREQ_W.get(m["rhythmus_klasse"], 0.5)
+        for i in range(len(knoten)):
+            for j in range(i+1, len(knoten)):
+                a,b = knoten[i], knoten[j]
+                if G.has_edge(a,b):
+                    G[a][b]["weight"] += w
                     G[a][b]["meetings"].append(m["name"])
                 else:
-                    G.add_edge(a, b, weight=gewicht, meetings=[m["name"]])
+                    G.add_edge(a,b,weight=w,meetings=[m["name"]])
 
-    # Layout
-    pos = nx.spring_layout(G, k=2.2, seed=42, weight="weight")
+    pos = nx.spring_layout(G, k=2.5, seed=42, weight="weight")
+    persons = list(G.nodes())
+    edges   = list(G.edges())
 
-    # Abteilungszuordnung für Knotenfarbe
-    PERSON_ABT = {
-        "Jco": "PC",  "MiG": "PC",  "Ktz": "PC",  "Sez": "PC",
-        "Bre": "PC",  "DrS": "PC",  "Zeller": "PC",
-        "Beb": "PCO", "Fln": "PCO", "Ipa": "PCO", "Zes": "PCO", "LeB": "PCO",
-        "Kip": "PCT", "Krö": "PCT", "Kis": "PCT", "Wud": "PCT", "Bra": "PCT",
-        "Kih": "PCT", "FMD": "PCT", "Tih": "PCT", "SMI": "PCT",
-        "Dem": "PCT", "Bas": "PCT", "CST": "PCT", "Dni": "PCT",
-        "HeT": "PCT", "Fef": "PCT",
-        "TOK": "PCC", "ADA": "PCC", "JFR": "PCC", "MGR": "PCC",
-        "MOS": "PCC", "AWA": "PCC",
-        "Urk": "PCS", "Zrb": "PCS", "Smt": "PCS", "KTF": "PCS",
-    }
-
-    # Kanten-Traces
+    # Kanten-Traces (eine pro Paar)
     edge_traces = []
-    for u, v, data in G.edges(data=True):
-        x0, y0 = pos[u]
-        x1, y1 = pos[v]
-        w = min(data["weight"], 10)
-        meetings_str = "<br>".join(data["meetings"][:5])
-        if len(data["meetings"]) > 5:
-            meetings_str += f"<br>... (+{len(data['meetings'])-5} weitere)"
+    for u,v in edges:
+        x0,y0 = pos[u]; x1,y1 = pos[v]
+        w = min(G[u][v]["weight"],10)
+        mn = "<br>".join(G[u][v]["meetings"][:5])
         edge_traces.append(go.Scatter(
-            x=[x0, x1, None], y=[y0, y1, None],
-            mode="lines",
-            line=dict(width=w * 0.6 + 0.5, color="rgba(150,150,150,0.4)"),
-            hoverinfo="text",
-            text=f"{u} ↔ {v}<br>Meetings: {meetings_str}",
-            showlegend=False,
+            x=[x0,x1,None], y=[y0,y1,None], mode="lines",
+            line=dict(width=w*0.5+0.3, color="rgba(156,163,175,0.45)"),
+            hovertext=f"<b>{u} ↔ {v}</b><br>{mn}",
+            hoverinfo="text", showlegend=False, opacity=1.0,
         ))
 
-    # Knoten-Traces (gruppiert nach Abteilung für Legende)
-    abt_gruppen = defaultdict(list)
-    for p in G.nodes():
-        abt = PERSON_ABT.get(p, "unbekannt")
-        abt_gruppen[abt].append(p)
-
+    # Knoten-Traces (eine pro Person, für präzise Filter-Kontrolle)
     node_traces = []
-    for abt, personen in sorted(abt_gruppen.items()):
-        xs = [pos[p][0] for p in personen]
-        ys = [pos[p][1] for p in personen]
-        # Knotengrad für Größe
-        sizes = [8 + G.degree(p) * 2.5 for p in personen]
-        # Hover-Text
-        hover = []
-        for p in personen:
-            m_namen = sorted({m["name"] for m in aktive if p in m["teilnehmer"]})
-            hover.append(
-                f"<b>{p}</b> ({abt})<br>"
-                f"Meetings ({len(m_namen)}): "
-                + ", ".join(m_namen[:6])
-                + ("..." if len(m_namen) > 6 else "")
-            )
+    for p in persons:
+        abt  = PERSON_ABT.get(p,"unbekannt")
+        sub  = PERSON_SUBTEAM.get(p,"")
+        deg  = G.degree(p)
+        mn   = sorted({m["name"] for m in aktive if p in m["teilnehmer"]})
+        hover = (f"<b>{p}</b> · {abt}{' / '+sub if sub else ''}<br>"
+                 f"Meetings ({len(mn)}): " + ", ".join(mn[:6]) + ("…" if len(mn)>6 else ""))
+        is_fk = p in FK_LIST
         node_traces.append(go.Scatter(
-            x=xs, y=ys,
+            x=[pos[p][0]], y=[pos[p][1]],
             mode="markers+text",
-            text=personen,
-            textposition="top center",
-            textfont=dict(size=9),
+            text=[p], textposition="top center",
+            textfont=dict(size=9, color="#374151"),
             marker=dict(
-                size=sizes,
-                color=ABT_FARBEN.get(abt, "#7f7f7f"),
-                line=dict(width=1, color="white"),
+                size=10+deg*2.8,
+                color=ABT_FARBEN.get(abt,"#9ca3af"),
+                symbol="star" if is_fk else "circle",
+                line=dict(width=2 if is_fk else 1, color="white"),
+                opacity=1.0,
             ),
-            name=abt,
-            hovertext=hover,
-            hoverinfo="text",
+            name=p, hovertext=hover, hoverinfo="text",
+            showlegend=False, opacity=1.0,
         ))
 
-    fig = go.Figure(data=edge_traces + node_traces)
+    # Updatemenus: eine Schaltfläche pro FK + "Alle"
+    n_edge = len(edge_traces)
+    n_node = len(node_traces)
+
+    def make_ops(fk):
+        nbrs = set(G.neighbors(fk)) | {fk}
+        e_ops = [0.7 if fk in (u,v) else 0.04 for u,v in edges]
+        n_ops = [1.0 if p in nbrs else 0.08 for p in persons]
+        return e_ops + n_ops
+
+    alle_ops = [1.0]*(n_edge+n_node)
+    buttons = [dict(label="Alle", method="restyle", args=[{"opacity": alle_ops}])]
+    for fk in FK_LIST:
+        if fk in G:
+            buttons.append(dict(label=fk, method="restyle", args=[{"opacity": make_ops(fk)}]))
+
+    # Legende: eine Dummy-Trace pro Abteilung
+    legend_traces = []
+    shown = set()
+    for p in persons:
+        abt = PERSON_ABT.get(p,"unbekannt")
+        if abt not in shown:
+            shown.add(abt)
+            legend_traces.append(go.Scatter(
+                x=[None], y=[None], mode="markers",
+                marker=dict(size=12, color=ABT_FARBEN.get(abt,"#9ca3af")),
+                name=abt, showlegend=True,
+            ))
+
+    all_traces = edge_traces + node_traces + legend_traces
+
+    fig = go.Figure(data=all_traces)
     fig.update_layout(
-        title="Kommunikationsnetzwerk – Wer trifft wen?",
-        title_font_size=16,
+        title=dict(text="Kommunikationsnetzwerk – Wer trifft wen?", font=dict(size=16,family="Inter")),
+        updatemenus=[dict(
+            type="dropdown", direction="down",
+            x=0.01, xanchor="left", y=1.12, yanchor="top",
+            bgcolor="white", bordercolor="#e5e7eb", font=dict(size=12),
+            buttons=buttons,
+            active=0,
+            pad={"r":10,"t":5},
+        )],
+        annotations=[dict(
+            text="<b>Personen-Filter:</b>", x=0.01, xanchor="left",
+            y=1.15, yanchor="top", xref="paper", yref="paper",
+            showarrow=False, font=dict(size=11,color="#6b7280"),
+        )],
         showlegend=True,
-        legend=dict(title="Abteilung", itemsizing="constant"),
+        legend=dict(title="Abteilung", itemsizing="constant", x=1.01, y=1),
         hovermode="closest",
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        plot_bgcolor="white",
-        height=620,
-        margin=dict(l=20, r=20, t=50, b=20),
-        annotations=[dict(
-            text="Knotengröße = Anzahl Meetings · Liniendicke = Frequenz",
-            xref="paper", yref="paper", x=0, y=-0.02,
-            showarrow=False, font=dict(size=10, color="gray")
-        )],
+        xaxis=dict(showgrid=False,zeroline=False,showticklabels=False),
+        yaxis=dict(showgrid=False,zeroline=False,showticklabels=False),
+        plot_bgcolor="white", paper_bgcolor="white",
+        height=640, margin=dict(l=10,r=140,t=80,b=10),
     )
     return fig
 
-# ===========================================================================
-# VIEW 2: Rhythmus-Kalender (Bubble-Chart: Wochentag × Rhythmus-Klasse)
-# ===========================================================================
+# ── VIEW 2: Kalender ─────────────────────────────────────────────────────────
 def build_kalender():
-    tage_order  = ["Mo", "Di", "Mi", "Do", "Fr", "—"]
-    rhy_order   = ["täglich", "wöchentlich", "dreiwöchentlich",
-                   "zweiwöchentlich", "monatlich", "quartalsweise", "variabel"]
-
-    rows = []
-    for m in aktive:
-        tage = m["wochentage"] if m["wochentage"] else ["—"]
-        for tag in tage:
-            rows.append({
-                "tag":      tag,
-                "rhythmus": m["rhythmus_klasse"],
-                "name":     m["name"],
-                "abt":      m["abteilung"],
-                "kategorie":m["kategorie"],
-                "platzh":   "⚠ Platzhalter" if m["ist_platzhalter"] else "",
-            })
-
-    # Aggregieren
+    tage_o = ["Mo","Di","Mi","Do","Fr","—"]
+    rhy_o  = list(reversed(["täglich","wöchentlich","dreiwöchentlich",
+                             "zweiwöchentlich","monatlich","quartalsweise","variabel"]))
     agg = defaultdict(list)
-    for r in rows:
-        agg[(r["tag"], r["rhythmus"])].append(r["name"])
-
-    xs, ys, sizes, texts, hovers, colors = [], [], [], [], [], []
-    for (tag, rhy), namen in agg.items():
-        xs.append(tag)
-        ys.append(rhy)
-        sizes.append(12 + len(namen) * 14)
-        texts.append(str(len(namen)))
-        hovers.append(f"<b>{tag} / {rhy}</b><br>" + "<br>".join(namen))
-        colors.append(RHY_FARBEN.get(rhy, "#aaa"))
-
+    for m in aktive:
+        for tag in (m["wochentage"] or ["—"]):
+            agg[(tag, m["rhythmus_klasse"])].append(m["name"])
+    xs,ys,szs,txts,hvrs,cols = [],[],[],[],[],[]
+    for (tag,rhy), namen in agg.items():
+        xs.append(tag); ys.append(rhy)
+        szs.append(14+len(namen)*16); txts.append(str(len(namen)))
+        hvrs.append(f"<b>{tag} / {rhy}</b><br>"+"<br>".join(namen))
+        cols.append(RHY_FARBEN.get(rhy,"#9ca3af"))
     fig = go.Figure(go.Scatter(
-        x=xs, y=ys,
-        mode="markers+text",
-        text=texts,
-        textfont=dict(size=11, color="white"),
-        marker=dict(size=sizes, color=colors, sizemode="diameter",
-                    line=dict(width=1, color="white")),
-        hovertext=hovers,
-        hoverinfo="text",
+        x=xs,y=ys,mode="markers+text",text=txts,
+        textfont=dict(size=12,color="white"),
+        marker=dict(size=szs,color=cols,sizemode="diameter",line=dict(width=1,color="white")),
+        hovertext=hvrs,hoverinfo="text",
     ))
     fig.update_layout(
-        title="Meeting-Kalender – Wann findet was statt?",
-        title_font_size=16,
-        xaxis=dict(title="Wochentag", categoryorder="array",
-                   categoryarray=tage_order),
-        yaxis=dict(title="Rhythmus", categoryorder="array",
-                   categoryarray=list(reversed(rhy_order))),
-        plot_bgcolor="white",
-        height=480,
-        margin=dict(l=140, r=20, t=50, b=60),
-        annotations=[dict(
-            text="Zahl = Anzahl Meetings an diesem Tag / in diesem Rhythmus",
-            xref="paper", yref="paper", x=0, y=-0.13,
-            showarrow=False, font=dict(size=10, color="gray")
-        )],
+        title=dict(text="Meeting-Kalender – Wann findet was statt?",font=dict(size=16,family="Inter")),
+        xaxis=dict(title="Wochentag",categoryorder="array",categoryarray=tage_o,
+                   showgrid=True,gridcolor="#f3f4f6"),
+        yaxis=dict(title="Rhythmus",categoryorder="array",categoryarray=rhy_o,
+                   showgrid=True,gridcolor="#f3f4f6"),
+        plot_bgcolor="white",paper_bgcolor="white",
+        height=460,margin=dict(l=150,r=20,t=60,b=80),
+        annotations=[dict(text="Bubble-Größe = Anzahl Meetings · Hover für Details",
+            xref="paper",yref="paper",x=0,y=-0.16,showarrow=False,
+            font=dict(size=10,color="#9ca3af"))],
     )
-    fig.update_xaxes(showgrid=True, gridcolor="#eee")
-    fig.update_yaxes(showgrid=True, gridcolor="#eee")
     return fig
 
-# ===========================================================================
-# VIEW 3: Teilnehmer-Overlap-Heatmap
-# ===========================================================================
+# ── VIEW 3: Überschneidungen ─────────────────────────────────────────────────
 def build_overlap():
-    # Nur Meetings mit bekannten Teilnehmern
-    m_gefiltert = [m for m in aktive if len(m["teilnehmer"]) >= 2]
-    namen = [m["name"] for m in m_gefiltert]
-    sets  = [set(m["teilnehmer"]) for m in m_gefiltert]
-    n     = len(m_gefiltert)
-
-    matrix = []
+    ml = [m for m in aktive if len(m["teilnehmer"])>=2]
+    namen = [m["name"] for m in ml]
+    sets  = [set(m["teilnehmer"]) for m in ml]
+    n = len(ml)
+    matrix, hover = [],[]
     for i in range(n):
-        zeile = []
+        mr,hr = [],[]
         for j in range(n):
-            if i == j:
-                zeile.append(1.0)
-            elif not sets[i] or not sets[j]:
-                zeile.append(0.0)
-            else:
-                jaccard = len(sets[i] & sets[j]) / len(sets[i] | sets[j])
-                zeile.append(round(jaccard, 2))
-        matrix.append(zeile)
-
-    # Hover-Text
-    hover = []
-    for i in range(n):
-        zeile = []
-        for j in range(n):
-            gemeinsam = sets[i] & sets[j]
-            zeile.append(
-                f"<b>{namen[i]}</b><br>vs.<br><b>{namen[j]}</b><br>"
-                f"Ähnlichkeit: {matrix[i][j]:.0%}<br>"
-                f"Gemeinsame Teilnehmer: {', '.join(sorted(gemeinsam)) or '–'}"
-            )
-        hover.append(zeile)
-
+            if i==j: v=1.0
+            elif not sets[i] or not sets[j]: v=0.0
+            else: v=round(len(sets[i]&sets[j])/len(sets[i]|sets[j]),2)
+            mr.append(v)
+            gem = sets[i]&sets[j]
+            hr.append(f"<b>{namen[i]}</b> ↔ <b>{namen[j]}</b><br>"
+                      f"Ähnlichkeit: {v:.0%}<br>Gemeinsam: {', '.join(sorted(gem)) or '–'}")
+        matrix.append(mr); hover.append(hr)
     fig = go.Figure(go.Heatmap(
-        z=matrix, x=namen, y=namen,
-        text=[[f"{v:.0%}" if v > 0 else "" for v in row] for row in matrix],
-        texttemplate="%{text}",
-        textfont=dict(size=8),
-        colorscale="RdYlGn_r",
-        zmin=0, zmax=1,
-        hovertext=hover,
-        hoverinfo="text",
-        colorbar=dict(title="Jaccard-<br>Ähnlichkeit"),
+        z=matrix,x=namen,y=namen,
+        text=[[f"{v:.0%}" if v>0 else "" for v in r] for r in matrix],
+        texttemplate="%{text}",textfont=dict(size=8),
+        colorscale="RdYlGn_r",zmin=0,zmax=1,
+        hovertext=hover,hoverinfo="text",
+        colorbar=dict(title="Jaccard<br>Ähnlichkeit"),
     ))
     fig.update_layout(
-        title="Teilnehmer-Überschneidung – Welche Meetings sind ähnlich?",
-        title_font_size=16,
-        height=700,
-        margin=dict(l=200, r=100, t=60, b=200),
-        xaxis=dict(tickangle=-45, tickfont=dict(size=9)),
+        title=dict(text="Teilnehmer-Überschneidung – Welche Meetings sind ähnlich?",
+                   font=dict(size=16,family="Inter")),
+        height=700,margin=dict(l=210,r=100,t=60,b=210),
+        xaxis=dict(tickangle=-45,tickfont=dict(size=9)),
         yaxis=dict(tickfont=dict(size=9)),
-        annotations=[dict(
-            text="Rot = hohe Überschneidung (potenzielle Redundanz) · Grün = keine Überschneidung",
-            xref="paper", yref="paper", x=0, y=-0.28,
-            showarrow=False, font=dict(size=10, color="gray")
-        )],
+        annotations=[dict(text="Rot = hohe Überschneidung (potenzielle Redundanz) · Hover für Details",
+            xref="paper",yref="paper",x=0,y=-0.3,showarrow=False,
+            font=dict(size=10,color="#9ca3af"))],
     )
     return fig
 
-# ===========================================================================
-# VIEW 4: Abteilungs-Übersicht (gestapelter Balken nach Rhythmus)
-# ===========================================================================
+# ── VIEW 4: Abteilungen ──────────────────────────────────────────────────────
 def build_abteilung():
-    abt_order = ["PC", "PCO", "PCT", "PCTAC/DC", "PCTProduct", "PCTDC", "PCC", "PCS"]
-    rhy_order = ["täglich", "wöchentlich", "dreiwöchentlich",
-                 "zweiwöchentlich", "monatlich", "quartalsweise", "variabel"]
-
-    # Daten aufbereiten
+    abt_o = ["PC","PCO","PCT","PCTAC/DC","PCTProduct","PCTDC","PCC","PCS"]
+    rhy_o = ["täglich","wöchentlich","dreiwöchentlich","zweiwöchentlich","monatlich","quartalsweise","variabel"]
     abt_rhy = defaultdict(lambda: defaultdict(list))
     for m in aktive:
         abt_rhy[m["abteilung"]][m["rhythmus_klasse"]].append(m["name"])
-
     traces = []
-    for rhy in rhy_order:
-        ys    = []
-        hover = []
-        for abt in abt_order:
-            m_namen = abt_rhy[abt][rhy]
-            ys.append(len(m_namen))
-            hover.append(f"<b>{abt} / {rhy}</b><br>" + ("<br>".join(m_namen) if m_namen else "–"))
-        traces.append(go.Bar(
-            name=rhy, x=abt_order, y=ys,
-            marker_color=RHY_FARBEN.get(rhy, "#aaa"),
-            hovertext=hover, hoverinfo="text",
-        ))
-
+    for rhy in rhy_o:
+        ys,hv = [],[]
+        for abt in abt_o:
+            mn = abt_rhy[abt][rhy]
+            ys.append(len(mn))
+            hv.append(f"<b>{abt} / {rhy}</b><br>" + ("<br>".join(mn) if mn else "–"))
+        traces.append(go.Bar(name=rhy,x=abt_o,y=ys,
+            marker_color=RHY_FARBEN.get(rhy,"#9ca3af"),
+            hovertext=hv,hoverinfo="text"))
     fig = go.Figure(data=traces)
     fig.update_layout(
         barmode="stack",
-        title="Meeting-Dichte pro Abteilung",
-        title_font_size=16,
-        xaxis_title="Abteilung",
-        yaxis_title="Anzahl Meetings",
-        legend_title="Rhythmus",
-        plot_bgcolor="white",
-        height=450,
-        margin=dict(l=60, r=20, t=60, b=60),
+        title=dict(text="Meeting-Dichte pro Abteilung",font=dict(size=16,family="Inter")),
+        xaxis_title="Abteilung",yaxis_title="Anzahl Meetings",legend_title="Rhythmus",
+        plot_bgcolor="white",paper_bgcolor="white",
+        height=440,margin=dict(l=60,r=20,t=60,b=60),
     )
-    fig.update_yaxes(showgrid=True, gridcolor="#eee")
+    fig.update_yaxes(showgrid=True,gridcolor="#f3f4f6")
     return fig
 
-# ===========================================================================
-# VIEW 5: Informationsfluss-Sankey
-# ===========================================================================
+# ── VIEW 5: Sankey ───────────────────────────────────────────────────────────
 def build_sankey():
-    # Meetings mit Abteilungs-Zuordnung der Teilnehmer
-    PERSON_ABT = {
-        "Jco": "PC",  "MiG": "PC",  "Ktz": "PC",  "Sez": "PC",
-        "Bre": "PC",  "DrS": "PC",  "Zeller": "PC",
-        "Beb": "PCO", "Fln": "PCO", "Ipa": "PCO", "Zes": "PCO", "LeB": "PCO",
-        "Kip": "PCT", "Krö": "PCT", "Kis": "PCT", "Wud": "PCT", "Bra": "PCT",
-        "Kih": "PCT", "FMD": "PCT", "Tih": "PCT", "SMI": "PCT",
-        "Dem": "PCT", "Bas": "PCT", "CST": "PCT", "Dni": "PCT",
-        "HeT": "PCT", "Fef": "PCT",
-        "TOK": "PCC", "ADA": "PCC", "JFR": "PCC", "MGR": "PCC",
-        "MOS": "PCC", "AWA": "PCC",
-        "Urk": "PCS", "Zrb": "PCS", "Smt": "PCS", "KTF": "PCS",
-    }
-
-    abt_list = ["PC", "PCO", "PCT", "PCC", "PCS", "Extern"]
-    abt_idx  = {a: i for i, a in enumerate(abt_list)}
-
+    abt_list = ["PC","PCO","PCT","PCC","PCS","Extern"]
+    abt_idx  = {a:i for i,a in enumerate(abt_list)}
     fluss = defaultdict(float)
     for m in aktive:
-        # Nur übergreifende Meetings
-        abts_im_meeting = set()
+        abts = set()
         for t in m["teilnehmer"]:
-            abt = PERSON_ABT.get(t, None)
-            if abt:
-                abts_im_meeting.add(abt)
-        if "Extern" in (m["teilnehmer_raw"] or "").lower() or \
-           any(t.lower() == "extern" for t in m["teilnehmer"]):
-            abts_im_meeting.add("Extern")
-
-        abts_im_meeting.add(m["abteilung"].split("/")[0].replace("PCT", "PCT").replace("PCTProduct", "PCT").replace("PCTDC", "PCT").replace("PCTAC/DC", "PCT"))
-
-        abts_liste = sorted(abts_im_meeting & set(abt_list))
-        gewicht    = FREQ_GEWICHT.get(m["rhythmus_klasse"], 0.5)
-        # Bidirektionaler Fluss zwischen allen Abt-Paaren
-        for i in range(len(abts_liste)):
-            for j in range(i + 1, len(abts_liste)):
-                a, b = abts_liste[i], abts_liste[j]
-                key = (a, b) if a < b else (b, a)
-                fluss[key] += gewicht
-
-    sources, targets, values, labels_hover = [], [], [], []
-    for (a, b), v in fluss.items():
-        sources.append(abt_idx[a])
-        targets.append(abt_idx[b])
-        values.append(round(v, 1))
-        labels_hover.append(f"{a} ↔ {b}: {v:.1f} Freq.-Punkte")
-
-    node_colors = [ABT_FARBEN.get(a, "#aaa") for a in abt_list]
-
+            if t in PERSON_ABT: abts.add(PERSON_ABT[t])
+        if any(t.lower()=="extern" for t in m["teilnehmer"]):
+            abts.add("Extern")
+        raw_abt = m["abteilung"].replace("PCTAC/DC","PCT").replace("PCTProduct","PCT").replace("PCTDC","PCT")
+        abts.add(raw_abt if raw_abt in abt_list else "PC")
+        al = sorted(abts & set(abt_list))
+        w  = FREQ_W.get(m["rhythmus_klasse"],0.5)
+        for i in range(len(al)):
+            for j in range(i+1,len(al)):
+                k = (al[i],al[j]) if al[i]<al[j] else (al[j],al[i])
+                fluss[k] += w
+    srcs,tgts,vals,lbl = [],[],[],[]
+    for (a,b),v in fluss.items():
+        srcs.append(abt_idx[a]); tgts.append(abt_idx[b])
+        vals.append(round(v,1)); lbl.append(f"{a} ↔ {b}: {v:.1f}")
     fig = go.Figure(go.Sankey(
-        node=dict(
-            pad=20, thickness=20,
-            line=dict(color="white", width=0.5),
-            label=abt_list,
-            color=node_colors,
-            hovertemplate="%{label}<extra></extra>",
-        ),
-        link=dict(
-            source=sources, target=targets, value=values,
-            customdata=labels_hover,
-            hovertemplate="%{customdata}<extra></extra>",
-            color="rgba(180,180,180,0.4)",
-        ),
+        node=dict(pad=20,thickness=20,
+                  line=dict(color="white",width=0.5),
+                  label=abt_list,
+                  color=[ABT_FARBEN.get(a,"#9ca3af") for a in abt_list],
+                  hovertemplate="%{label}<extra></extra>"),
+        link=dict(source=srcs,target=tgts,value=vals,
+                  customdata=lbl,
+                  hovertemplate="%{customdata}<extra></extra>",
+                  color="rgba(200,200,200,0.4)"),
     ))
     fig.update_layout(
-        title="Informationsfluss zwischen Abteilungen<br>"
-              "<sup>Flussdicke = gewichtete Meeting-Frequenz</sup>",
-        title_font_size=16,
-        height=450,
-        margin=dict(l=20, r=20, t=70, b=40),
+        title=dict(text="Informationsfluss zwischen Abteilungen · Flussdicke = gewichtete Meeting-Frequenz",
+                   font=dict(size=15,family="Inter")),
+        height=440,margin=dict(l=20,r=20,t=60,b=30),
     )
     return fig
 
-# ===========================================================================
-# VIEW 6: Interaktive Tabelle
-# ===========================================================================
-def build_tabelle():
-    zeilen = []
-    for m in meetings:  # alle, inkl. Geplant
+# ── VIEW 6: Tabelle ──────────────────────────────────────────────────────────
+def build_tabelle_html():
+    """Gibt eine reine HTML-Tabelle zurück (kein Plotly) – filterbar per JS."""
+    rows_html = ""
+    for m in meetings:
         platzh = "⚠" if m["ist_platzhalter"] else ""
-        abt_ug = "✓" if m["abteilungsuebergreifend"] else ""
-        zeilen.append({
-            "Abteilung":   m["abteilung"],
-            "Meeting":     m["name"],
-            "Kategorie":   m["kategorie"],
-            "Rhythmus":    m["rhythmus_klasse"],
-            "Verantwortl.": m["verantwortlich"] or "–",
-            "Teilnehmer":  ", ".join(m["teilnehmer"]) or m.get("teilnehmer_raw") or "–",
-            "Status":      m["status"],
-            "Übergreif.":  abt_ug,
-            "Platzh.":     platzh,
-            "Zweck":       (m["zweck"] or "–")[:120],
-            "Learnings":   m["learning"] or "–",
-        })
+        ug     = "✓" if m["abteilungsuebergreifend"] else ""
+        teiln  = ", ".join(m["teilnehmer"]) or m.get("teilnehmer_raw") or "–"
+        vera   = m["verantwortlich"] or "–"
+        status_cls = "badge-aktiv" if m["status"]=="Aktiv" else "badge-geplant"
+        zweck  = (m["zweck"] or "–")[:110] + ("…" if (m["zweck"] or "")[:110] != (m["zweck"] or "") else "")
+        learning = m["learning"] or "–"
 
-    cols = ["Abteilung", "Meeting", "Kategorie", "Rhythmus", "Verantwortl.",
-            "Teilnehmer", "Status", "Übergreif.", "Platzh.", "Zweck", "Learnings"]
-    col_widths = [70, 200, 120, 110, 90, 200, 60, 75, 60, 280, 260]
+        # data-attrs für JS-Filter
+        data_abt   = m["abteilung"]
+        data_vera  = vera
+        data_teiln = teiln
 
-    fig = go.Figure(go.Table(
-        header=dict(
-            values=[f"<b>{c}</b>" for c in cols],
-            fill_color="#2c3e50",
-            font=dict(color="white", size=11),
-            align="left",
-            height=32,
-        ),
-        cells=dict(
-            values=[[r[c] for r in zeilen] for c in cols],
-            fill_color=[
-                ["#f0f4f8" if i % 2 == 0 else "white" for i in range(len(zeilen))]
-            ] * len(cols),
-            align="left",
-            font=dict(size=10),
-            height=28,
-        ),
-        columnwidth=col_widths,
-    ))
-    fig.update_layout(
-        title="Alle Meetings im Überblick",
-        title_font_size=16,
-        height=max(500, 50 + len(zeilen) * 30),
-        margin=dict(l=10, r=10, t=50, b=10),
-    )
-    return fig
+        rows_html += f"""<tr data-abt="{data_abt}" data-vera="{data_vera}" data-teiln="{data_teiln}">
+          <td><span class="abt-badge" style="background:{ABT_FARBEN.get(m['abteilung'],'#9ca3af')}22;color:{ABT_FARBEN.get(m['abteilung'],'#6b7280')};border:1px solid {ABT_FARBEN.get(m['abteilung'],'#9ca3af')}55">{m['abteilung']}</span></td>
+          <td class="meeting-name">{m['name']}{' <span class="platzh-badge">⚠ Platzhalter</span>' if platzh else ''}</td>
+          <td><span class="kat-pill">{m['kategorie']}</span></td>
+          <td><span class="rhy-dot" style="background:{RHY_FARBEN.get(m['rhythmus_klasse'],'#9ca3af')}"></span>{m['rhythmus_klasse']}</td>
+          <td>{vera}</td>
+          <td class="teiln-cell">{teiln}</td>
+          <td><span class="badge {status_cls}">{m['status']}</span></td>
+          <td style="text-align:center">{ug}</td>
+          <td class="zweck-cell">{zweck}</td>
+          <td class="learning-cell">{learning}</td>
+        </tr>"""
 
-# ===========================================================================
-# Dashboard zusammenbauen
-# ===========================================================================
-print("🔨 Erzeuge Charts...")
-fig_netz    = build_network()
-fig_kal     = build_kalender()
-fig_overlap = build_overlap()
-fig_abt     = build_abteilung()
-fig_sankey  = build_sankey()
-fig_tabelle = build_tabelle()
-print("   ✓ Alle 6 Charts erzeugt")
+    return f"""
+    <div class="table-toolbar">
+      <input type="text" id="table-search" placeholder="🔍  Meeting, Person, Abteilung …" oninput="filterTable()">
+      <div class="table-meta" id="table-count"></div>
+    </div>
+    <div class="table-wrap">
+    <table id="meeting-table">
+      <thead><tr>
+        <th>Abteilung</th><th>Meeting</th><th>Kategorie</th><th>Rhythmus</th>
+        <th>Verantwortl.</th><th>Teilnehmer</th><th>Status</th>
+        <th title="Abteilungsübergreifend">Übergr.</th><th>Zweck</th><th>Learnings</th>
+      </tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    </div>"""
 
-div_netz    = fig_to_div(fig_netz)
-div_kal     = fig_to_div(fig_kal)
-div_overlap = fig_to_div(fig_overlap)
-div_abt     = fig_to_div(fig_abt)
-div_sankey  = fig_to_div(fig_sankey)
-div_tabelle = fig_to_div(fig_tabelle)
+# ── VIEW 7: Findings / Auffälligkeiten ───────────────────────────────────────
+def build_findings_html():
+    findings = [
+        # (kategorie, emoji, titel, beschreibung)
+        ("redundanz","🔴","PC Leitungsmeeting ↔ 3M (Monthly Management Meeting)",
+         "Fast identische Teilnehmer: Jco, Ktz, Beb, TOK, MiG, Kip, Urk. Das Leitungsmeeting läuft wöchentlich, das 3M monatlich – mit sehr ähnlichem Reporting-Fokus. Ist das monatliche Meeting eine eigenständige Eskalationsebene oder ein Duplikat?"),
+        ("redundanz","🔴","Reklamationsmeeting ↔ Reklamation",
+         "Zwei Meetings mit sehr ähnlichem Namen unter PCC. Das Reklamationsmeeting ist wöchentlich (operativ), die Reklamation ist quartalsweise (statistisch/strategisch). Abgrenzung ist in der Quelltabelle nicht klar dokumentiert."),
+        ("redundanz","🔴","JF Beschaffung ↔ JF Enasys",
+         "Beide wöchentlich, beide mit Ipa und Beb, beide thematisch um Beschaffung/Vorkomponenten. JF Beschaffung fokussiert auf strategische Beschaffung, JF Enasys auf Enasys-spezifische Themen. Könnten sie kombiniert oder gestaffelt werden?"),
+        ("last","⚠️","Kip (PCT) – höchste Meeting-Last im Netzwerk",
+         "Kip ist in ≥12 aktiven Meetings involviert, davon verantwortet er 6 direkt. Täglich, wöchentlich, zweiwöchentlich. Ist diese Meeting-Dichte für eine Führungskraft langfristig nachhaltig?"),
+        ("last","⚠️","Beb (PCO) – 4 individuelle JFs + Teammeeting",
+         "Beb führt wöchentliche Einzel-JFs mit Ipa, Fln und Jco (jeweils getrennt), plus das PCO Teammeeting. Bietet das Teammeeting noch eigenständigen Mehrwert, wenn alle 1:1-Themen schon abgedeckt sind?"),
+        ("last","⚠️","TOK (PCC) – 7 Meetings, davon 2 täglich",
+         "TOK verantwortet PCC-Update (täglich) und hat 1:1 MA Gespräche (wöchentlich, Platzhalter für alle Einzelgespräche mit dem Team). Dazu Teilnahme am Leitungsmeeting, 3M und wöchentlichem CCU2 UL Meeting."),
+        ("luecke","🕳️","Keine regelmäßige Schiene PCC ↔ PCS dokumentiert",
+         "Customer (PCC) und Sales (PCS) haben kein gemeinsames regelmäßiges Meeting. Bei Reklamationen, Kundenanfragen oder Eskalationen ist unklar, wie Informationen zwischen diesen Abteilungen fließen. Informell geregelt?"),
+        ("luecke","🕳️","Keine regelmäßige Schiene PCO ↔ PCS dokumentiert",
+         "Einkauf/Operations (PCO) und Sales (PCS) sind im Netzwerk nicht direkt verbunden. Bei kundenseitigen Bedarfen, Lieferzeiten oder Beschaffungsfragen wäre eine direkte Schiene relevant."),
+        ("luecke","🕳️","Kein übergreifendes Führungskräfte-Forum auf Teamlead-Ebene",
+         "Unterhalb des Leitungsmeetings (GF-Ebene) gibt es kein dokumentiertes Meeting, in dem die Teamleads abteilungsübergreifend koordinieren. Beb, TOK, Urk, Kip treffen sich nur im Leitungsmeeting gemeinsam."),
+        ("klaerung","❓","1:1 MA Gespräche (Kip/PCT) – täglich oder rotierend?",
+         "Als täglich eingetragen: Mo/Di/Do 13:00–13:30, Mi 09:30–10:00, Fr Puffertermin. Trifft Kip täglich jeden Mitarbeiter, oder ist das ein Rotationsplan (je Tag ein anderer)? Die Häufigkeit hat große Auswirkung auf die Meeting-Last-Analyse."),
+        ("klaerung","❓","'Regeltermin Turn – PQR' doppelt in der Quelltabelle",
+         "Das Meeting erschien in Zeile 4 (mit vollständigen Daten) und Zeile 7 (unvollständig, ohne Teilnehmer und Zweck). Das zweite Vorkommen wurde bereinigt. Handelt es sich um zwei verschiedene Meeting-Instanzen oder ein Duplikat?"),
+        ("klaerung","❓","PSG Sitzung – wer sind 'Projektverantwortliche' konkret?",
+         "Als Teilnehmer steht nur 'Projektverantwortliche'. Für eine vollständige Analyse des Informationsflusses: Welche Personen bzw. Rollen sind regelmäßig dabei? Alle POs (Kip, Krö, Kis)?"),
+        ("klaerung","❓","JF Kunden – wer ist 'Kundenbetreuer' konkret?",
+         "Verantwortlich = 'Kundenbetreuer'. Ist das eine Rolle, die von Urk oder anderen PCS-Mitgliedern je nach Kunde übernommen wird? Für Netzwerk-Analyse relevant."),
+        ("klaerung","❓","'PCS/ACF Sprintreview' – Name irreführend",
+         "Laut Klärung ist das ein Produkt-Review innerhalb PCT AC. Verantwortlich ist Kip, durchgeführt von Kis. Der Name suggeriert PCS-Beteiligung, tatsächlich ist es ein PCT-internes Meeting. Sollte der Name in der Quelltabelle angepasst werden?"),
+        ("datenqualitaet","📝","11 Meetings ohne Informationsfluss-Dokumentation",
+         "Für 11 aktive Meetings ist nicht dokumentiert, welche Informationen hineinfließen und welche Entscheidungen/Outputs herauskommen. Empfehlung: Im Rahmen der Meeting-Überprüfung nachpflegen – der Informationsfluss ist entscheidend für die Qualitätsbeurteilung."),
+        ("datenqualitaet","📝","Asymmetrie in der Dokumentation von Einzelgesprächen",
+         "Urk und Beb listen ihre 1:1-Gespräche namentlich auf (pro Person ein eigenes Meeting). TOK und Kip verwenden Platzhalter. Das macht den Vergleich schwierig. Empfehlung: Einheitlichen Standard festlegen."),
+        ("datenqualitaet","📝","Abteilung 'PCS/ACF Sprintreview' weist auf PCT hin",
+         "Meeting ist unter PCT geführt, Name enthält PCS. Im Netzwerk wird dieses Meeting korrekt bei PCT verortet, aber der Name könnte zu Verwechslungen führen."),
+    ]
 
-# Datenqualitäts-Warnungen
+    kat_meta = {
+        "redundanz":      ("Mögliche Redundanzen",    "#dc2626","#fef2f2","#fca5a5"),
+        "last":           ("Hohe Meeting-Last",        "#d97706","#fffbeb","#fcd34d"),
+        "luecke":         ("Kommunikationslücken",     "#7c3aed","#f5f3ff","#c4b5fd"),
+        "klaerung":       ("Klärungsbedarf",           "#0369a1","#eff6ff","#93c5fd"),
+        "datenqualitaet": ("Datenqualität",            "#374151","#f9fafb","#d1d5db"),
+    }
+
+    html = ""
+    for kat, (titel, col, bg, border) in kat_meta.items():
+        items = [f for f in findings if f[0]==kat]
+        html += f"""<div class="finding-category">
+      <h3 style="color:{col};border-left:4px solid {col};padding-left:10px">{titel} <span class="finding-count">{len(items)}</span></h3>"""
+        for i, (_, emoji, heading, desc) in enumerate(items):
+            fid = f"{kat}-{i}"
+            html += f"""<div class="finding-card" id="card-{fid}" style="border-left:3px solid {border};background:{bg}">
+        <div class="finding-header" onclick="toggleFinding('{fid}')">
+          <span class="finding-emoji">{emoji}</span>
+          <span class="finding-title">{heading}</span>
+          <span class="finding-status offen" id="status-{fid}" onclick="cycleStatus(event,'{fid}')">Offen</span>
+          <span class="finding-arrow" id="arrow-{fid}">▸</span>
+        </div>
+        <div class="finding-body" id="body-{fid}">
+          <p>{desc}</p>
+          <div class="finding-note">
+            <label>Notiz / Ergebnis:</label>
+            <textarea id="note-{fid}" placeholder="Hier Ergebnis oder Maßnahme eintragen …" rows="2"></textarea>
+          </div>
+        </div>
+      </div>"""
+        html += "</div>"
+
+    summary = f"<div class='findings-summary'>Gesamt: <b>{len(findings)} Auffälligkeiten</b> in {len(kat_meta)} Kategorien · Klicke auf eine Karte zum Aufklappen · Status-Badge anklicken zum Weiterschalten</div>"
+    return summary + html
+
+# ── Alle Charts rendern ──────────────────────────────────────────────────────
+print("🔨 Erzeuge Charts…")
+div_netz    = fig_div(build_network())
+div_kal     = fig_div(build_kalender())
+div_overlap = fig_div(build_overlap())
+div_abt     = fig_div(build_abteilung())
+div_sankey  = fig_div(build_sankey())
+html_tabelle  = build_tabelle_html()
+html_findings = build_findings_html()
+print("   ✓ Alle Views erzeugt")
+
+# ── Statistiken ──────────────────────────────────────────────────────────────
+n_aktiv  = sum(1 for m in meetings if m["status"]=="Aktiv")
+n_woech  = sum(1 for m in meetings if m["rhythmus_klasse"]=="wöchentlich")
+n_ug     = sum(1 for m in meetings if m["abteilungsuebergreifend"])
+n_einzel = sum(1 for m in meetings if m["kategorie"]=="Einzelgespräch")
 n_platzh = sum(1 for m in meetings if m["ist_platzhalter"])
 n_ohne_info = sum(1 for m in meetings if not m["infofluss"])
-n_geplant = sum(1 for m in meetings if m["status"] == "Geplant")
-warnungen = []
-if n_platzh:
-    warnungen.append(
-        f"<b>{n_platzh} Meetings</b> haben unvollständige Teilnehmer-Angaben (Platzhalter ⚠). "
-        "Diese erscheinen im Netzwerk-Diagramm nicht mit allen Verbindungen."
-    )
-if n_ohne_info:
-    warnungen.append(
-        f"<b>{n_ohne_info} Meetings</b> ohne Informationsfluss-Dokumentation – "
-        "Nachpflege in der Quelltabelle empfohlen."
-    )
-if n_geplant:
-    warnungen.append(
-        f"<b>{n_geplant} Meeting</b> ist noch im Status 'Geplant' und noch nicht aktiv."
-    )
 
-warn_html = "".join(f'<li>{w}</li>' for w in warnungen)
+warn_items = []
+if n_platzh: warn_items.append(f"<b>{n_platzh} Meetings</b> mit unvollständigen Teilnehmer-Angaben (Platzhalter ⚠)")
+if n_ohne_info: warn_items.append(f"<b>{n_ohne_info} Meetings</b> ohne Informationsfluss-Dokumentation")
+warn_html = "".join(f"<li>{w}</li>" for w in warn_items)
 
-# Statistik-Kacheln
-n_aktiv    = sum(1 for m in meetings if m["status"] == "Aktiv")
-n_uebergr  = sum(1 for m in meetings if m["abteilungsuebergreifend"])
-n_einzel   = sum(1 for m in meetings if m["kategorie"] == "Einzelgespräch")
-n_woech    = sum(1 for m in meetings if m["rhythmus_klasse"] == "wöchentlich")
-
+# ── HTML zusammensetzen ──────────────────────────────────────────────────────
 html = f"""<!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Organisations-Meeting-Informationsfluss</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Organisations-Meeting & Informationsfluss</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-          background: #f5f6fa; color: #2c3e50; }}
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:"Inter",system-ui,sans-serif;background:#f8fafc;color:#1e293b;font-size:14px}}
 
-  .header {{ background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
-             color: white; padding: 28px 40px; }}
-  .header h1 {{ font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }}
-  .header p  {{ opacity: 0.85; font-size: 0.9rem; }}
+/* Header */
+.header{{background:linear-gradient(135deg,#1e40af 0%,#2563eb 60%,#0891b2 100%);
+  color:white;padding:22px 36px 20px}}
+.header h1{{font-size:1.45rem;font-weight:700;letter-spacing:-0.3px}}
+.header p{{opacity:.8;font-size:.82rem;margin-top:3px}}
 
-  .kacheln {{ display: flex; gap: 16px; padding: 20px 40px;
-              flex-wrap: wrap; }}
-  .kachel {{ background: white; border-radius: 8px; padding: 16px 22px;
-             box-shadow: 0 1px 6px rgba(0,0,0,.08); min-width: 140px;
-             flex: 1; text-align: center; }}
-  .kachel .zahl {{ font-size: 2rem; font-weight: 700; color: #3498db; }}
-  .kachel .label {{ font-size: 0.8rem; color: #666; margin-top: 2px; }}
+/* Stats */
+.stats{{display:flex;gap:12px;padding:16px 36px;flex-wrap:wrap}}
+.stat{{background:white;border-radius:10px;padding:14px 20px;flex:1;min-width:120px;
+  text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.07);border:1px solid #f1f5f9}}
+.stat .val{{font-size:1.9rem;font-weight:700;color:#2563eb;line-height:1}}
+.stat .lbl{{font-size:.75rem;color:#64748b;margin-top:3px}}
 
-  .tabs {{ display: flex; gap: 4px; padding: 0 40px;
-           border-bottom: 2px solid #ddd; background: #f5f6fa; }}
-  .tab  {{ padding: 10px 18px; cursor: pointer; font-size: 0.88rem;
-           border: none; background: none; color: #555; font-weight: 500;
-           border-bottom: 3px solid transparent; margin-bottom: -2px;
-           transition: all .15s; }}
-  .tab:hover  {{ color: #3498db; }}
-  .tab.aktiv  {{ color: #3498db; border-bottom-color: #3498db; }}
+/* Warnungen */
+.warnings{{margin:0 36px 12px;background:#fffbeb;border:1px solid #fcd34d;
+  border-left:4px solid #f59e0b;border-radius:6px;padding:10px 14px;font-size:.82rem}}
+.warnings ul{{padding-left:16px}}
+.warnings li{{margin-bottom:2px}}
 
-  .panel {{ display: none; padding: 24px 40px; }}
-  .panel.aktiv {{ display: block; }}
+/* Tabs */
+.tab-bar{{display:flex;gap:2px;padding:0 36px;background:#f8fafc;
+  border-bottom:2px solid #e2e8f0;position:sticky;top:0;z-index:100}}
+.tab-btn{{padding:10px 16px;border:none;background:none;cursor:pointer;
+  font-family:inherit;font-size:.83rem;font-weight:500;color:#64748b;
+  border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s}}
+.tab-btn:hover{{color:#2563eb}}
+.tab-btn.active{{color:#2563eb;border-bottom-color:#2563eb}}
 
-  .chart-box {{ background: white; border-radius: 8px; padding: 16px;
-                box-shadow: 0 1px 6px rgba(0,0,0,.08); }}
-  .chart-hint {{ font-size: 0.82rem; color: #888; margin-top: 8px; }}
+/* Panel */
+.panel{{display:none;padding:20px 36px 30px}}
+.panel.active{{display:block}}
+.chart-card{{background:white;border-radius:10px;padding:16px;
+  box-shadow:0 1px 4px rgba(0,0,0,.07);border:1px solid #f1f5f9}}
+.hint{{font-size:.78rem;color:#94a3b8;margin-top:8px;padding-left:4px}}
 
-  .warnungen {{ margin: 0 40px 16px; background: #fff8e1; border-left: 4px solid #f39c12;
-                border-radius: 4px; padding: 12px 16px; font-size: 0.85rem; }}
-  .warnungen h3 {{ font-size: 0.9rem; margin-bottom: 6px; color: #e67e22; }}
-  .warnungen li {{ margin-left: 16px; margin-bottom: 4px; }}
+/* Tabellen-Panel */
+.table-toolbar{{display:flex;align-items:center;gap:12px;margin-bottom:12px}}
+#table-search{{flex:1;max-width:380px;padding:8px 12px;border:1px solid #e2e8f0;
+  border-radius:8px;font-family:inherit;font-size:.85rem;outline:none}}
+#table-search:focus{{border-color:#2563eb;box-shadow:0 0 0 3px #dbeafe}}
+.table-meta{{font-size:.8rem;color:#94a3b8}}
+.table-wrap{{overflow-x:auto;border-radius:8px;border:1px solid #e2e8f0}}
+#meeting-table{{width:100%;border-collapse:collapse;font-size:.82rem}}
+#meeting-table thead th{{background:#1e293b;color:white;padding:10px 12px;
+  text-align:left;font-weight:600;white-space:nowrap;position:sticky;top:0}}
+#meeting-table tbody tr{{border-bottom:1px solid #f1f5f9;transition:background .1s}}
+#meeting-table tbody tr:hover{{background:#f8fafc}}
+#meeting-table td{{padding:9px 12px;vertical-align:top}}
+.abt-badge{{display:inline-block;padding:2px 7px;border-radius:4px;
+  font-size:.75rem;font-weight:600;white-space:nowrap}}
+.meeting-name{{font-weight:500;min-width:160px}}
+.platzh-badge{{display:inline-block;font-size:.7rem;background:#fef3c7;
+  color:#d97706;border:1px solid #fcd34d;border-radius:3px;padding:1px 5px;margin-left:4px}}
+.kat-pill{{display:inline-block;background:#f1f5f9;color:#475569;border-radius:4px;
+  padding:2px 7px;font-size:.74rem;white-space:nowrap}}
+.rhy-dot{{display:inline-block;width:8px;height:8px;border-radius:50%;
+  margin-right:5px;vertical-align:middle}}
+.badge{{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.75rem;font-weight:600}}
+.badge-aktiv{{background:#dcfce7;color:#15803d}}
+.badge-geplant{{background:#dbeafe;color:#1d4ed8}}
+.teiln-cell,.zweck-cell,.learning-cell{{max-width:220px;font-size:.8rem;color:#475569}}
 
-  .footer {{ text-align: center; padding: 24px; font-size: 0.78rem; color: #aaa; }}
+/* Findings */
+.findings-summary{{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
+  padding:10px 16px;margin-bottom:16px;font-size:.85rem;color:#475569}}
+.finding-category{{margin-bottom:20px}}
+.finding-category h3{{font-size:.95rem;font-weight:700;margin-bottom:10px;
+  display:flex;align-items:center;gap:8px}}
+.finding-count{{background:currentColor;color:white;border-radius:20px;
+  padding:1px 8px;font-size:.75rem;font-weight:700;opacity:.85}}
+.finding-card{{border-radius:8px;margin-bottom:8px;overflow:hidden;
+  box-shadow:0 1px 3px rgba(0,0,0,.06)}}
+.finding-header{{display:flex;align-items:center;gap:10px;padding:11px 14px;
+  cursor:pointer;user-select:none}}
+.finding-header:hover{{filter:brightness(.97)}}
+.finding-emoji{{font-size:1rem;flex-shrink:0}}
+.finding-title{{flex:1;font-weight:500;font-size:.88rem}}
+.finding-status{{padding:3px 9px;border-radius:20px;font-size:.73rem;font-weight:700;
+  cursor:pointer;white-space:nowrap;flex-shrink:0}}
+.offen{{background:#fee2e2;color:#dc2626}}
+.klaerung{{background:#fef3c7;color:#d97706}}
+.geklaert{{background:#dcfce7;color:#16a34a}}
+.finding-arrow{{color:#9ca3af;font-size:.8rem;transition:transform .2s;flex-shrink:0}}
+.finding-body{{display:none;padding:12px 16px 14px 42px;border-top:1px solid rgba(0,0,0,.06)}}
+.finding-body p{{font-size:.85rem;color:#374151;line-height:1.6}}
+.finding-note{{margin-top:10px}}
+.finding-note label{{font-size:.78rem;font-weight:600;color:#6b7280;display:block;margin-bottom:4px}}
+.finding-note textarea{{width:100%;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;
+  font-family:inherit;font-size:.82rem;resize:vertical;outline:none;background:#fff}}
+.finding-note textarea:focus{{border-color:#2563eb}}
+
+/* Footer */
+.footer{{text-align:center;padding:24px;font-size:.74rem;color:#94a3b8;border-top:1px solid #f1f5f9}}
 </style>
 </head>
 <body>
 
 <div class="header">
   <h1>Organisations-Meeting &amp; Informationsfluss</h1>
-  <p>Interaktives Dashboard · Stand: 26.05.2026 · Quelle: LeitMet.xlsx</p>
+  <p>Interaktives Dashboard · Stand: 26.05.2026 · Quelle: LeitMet.xlsx · {len(meetings)} Meetings</p>
 </div>
 
-<div class="kacheln">
-  <div class="kachel"><div class="zahl">{n_aktiv}</div><div class="label">Aktive Meetings</div></div>
-  <div class="kachel"><div class="zahl">{n_woech}</div><div class="label">Wöchentlich</div></div>
-  <div class="kachel"><div class="zahl">{n_uebergr}</div><div class="label">Abteilungsübergreifend</div></div>
-  <div class="kachel"><div class="zahl">{n_einzel}</div><div class="label">Einzelgespräche</div></div>
-  <div class="kachel"><div class="zahl">{n_platzh}</div><div class="label">⚠ Platzhalter</div></div>
+<div class="stats">
+  <div class="stat"><div class="val">{n_aktiv}</div><div class="lbl">Aktive Meetings</div></div>
+  <div class="stat"><div class="val">{n_woech}</div><div class="lbl">Wöchentlich</div></div>
+  <div class="stat"><div class="val">{n_ug}</div><div class="lbl">Abteilungsübergreifend</div></div>
+  <div class="stat"><div class="val">{n_einzel}</div><div class="lbl">Einzelgespräche</div></div>
+  <div class="stat"><div class="val">{n_platzh}</div><div class="lbl">⚠ Platzhalter</div></div>
 </div>
 
-{"<div class='warnungen'><h3>⚠ Datenqualitäts-Hinweise</h3><ul>" + warn_html + "</ul></div>" if warnungen else ""}
+{"<div class='warnings'><ul>" + warn_html + "</ul></div>" if warn_html else ""}
 
-<div class="tabs">
-  <button class="tab aktiv" onclick="zeigTab(0)">🕸 Netzwerk</button>
-  <button class="tab" onclick="zeigTab(1)">📅 Kalender</button>
-  <button class="tab" onclick="zeigTab(2)">🔴 Überschneidungen</button>
-  <button class="tab" onclick="zeigTab(3)">📊 Abteilungen</button>
-  <button class="tab" onclick="zeigTab(4)">🌊 Informationsfluss</button>
-  <button class="tab" onclick="zeigTab(5)">📋 Alle Meetings</button>
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="showTab(0)">🕸 Netzwerk</button>
+  <button class="tab-btn" onclick="showTab(1)">📅 Kalender</button>
+  <button class="tab-btn" onclick="showTab(2)">🔴 Überschneidungen</button>
+  <button class="tab-btn" onclick="showTab(3)">📊 Abteilungen</button>
+  <button class="tab-btn" onclick="showTab(4)">🌊 Informationsfluss</button>
+  <button class="tab-btn" onclick="showTab(5)">📋 Alle Meetings</button>
+  <button class="tab-btn" onclick="showTab(6)">💡 Auffälligkeiten</button>
 </div>
 
-<div id="panel-0" class="panel aktiv">
-  <div class="chart-box">{div_netz}</div>
-  <p class="chart-hint">💡 Klicke auf einen Namen oder eine Verbindungslinie, um Details zu sehen. Knotengröße = Anzahl Meetings. Liniendicke = Frequenz-Gewicht.</p>
+<div id="panel-0" class="panel active">
+  <div class="chart-card">{div_netz}</div>
+  <p class="hint">⭐ = Führungskraft · Knotengröße = Meeting-Anzahl · Liniendicke = Frequenz · Person-Filter oben links im Chart</p>
 </div>
 <div id="panel-1" class="panel">
-  <div class="chart-box">{div_kal}</div>
-  <p class="chart-hint">💡 Blasengröße = Anzahl Meetings an diesem Tag/Rhythmus. Hover für Meeting-Namen.</p>
+  <div class="chart-card">{div_kal}</div>
+  <p class="hint">Bubble-Größe = Anzahl Meetings an diesem Tag/Rhythmus · Hover für Meeting-Namen</p>
 </div>
 <div id="panel-2" class="panel">
-  <div class="chart-box">{div_overlap}</div>
-  <p class="chart-hint">💡 Rote Felder = hohe Teilnehmer-Überschneidung = potenzielle Redundanz. Grüne Felder = keine gemeinsamen Teilnehmer.</p>
+  <div class="chart-card">{div_overlap}</div>
+  <p class="hint">Rot = hohe Teilnehmer-Überschneidung (potenzielle Redundanz) · Hover für gemeinsame Personen</p>
 </div>
 <div id="panel-3" class="panel">
-  <div class="chart-box">{div_abt}</div>
-  <p class="chart-hint">💡 Gestapelte Balken zeigen die Rhythmus-Verteilung pro Abteilung. Hover für Meeting-Namen.</p>
+  <div class="chart-card">{div_abt}</div>
+  <p class="hint">Gestapelte Balken nach Rhythmus · Hover für Meeting-Namen</p>
 </div>
 <div id="panel-4" class="panel">
-  <div class="chart-box">{div_sankey}</div>
-  <p class="chart-hint">💡 Flussdicke = gewichtete Meeting-Frequenz zwischen Abteilungen. Nur aktive, abteilungsübergreifende Meetings.</p>
+  <div class="chart-card">{div_sankey}</div>
+  <p class="hint">Flussdicke = gewichtete Meeting-Frequenz zwischen Abteilungen</p>
 </div>
 <div id="panel-5" class="panel">
-  <div class="chart-box">{div_tabelle}</div>
-  <p class="chart-hint">💡 ✓ = abteilungsübergreifend · ⚠ = unvollständige Teilnehmer-Angabe</p>
+  {html_tabelle}
+  <p class="hint">Suche filtert über Meeting-Name, Teilnehmer und Abteilung</p>
+</div>
+<div id="panel-6" class="panel">
+  {html_findings}
 </div>
 
 <div class="footer">
@@ -646,23 +629,60 @@ html = f"""<!DOCTYPE html>
 </div>
 
 <script>
-function zeigTab(idx) {{
-  document.querySelectorAll(".tab").forEach((t, i) => {{
-    t.classList.toggle("aktiv", i === idx);
+// ── Tab-Navigation ────────────────────────────────────────────────────────
+function showTab(idx) {{
+  document.querySelectorAll(".tab-btn").forEach((b,i)=>b.classList.toggle("active",i===idx));
+  document.querySelectorAll(".panel").forEach((p,i)=>p.classList.toggle("active",i===idx));
+  var plots = document.getElementById("panel-"+idx).querySelectorAll(".plotly-graph-div");
+  plots.forEach(p=>Plotly.relayout(p,{{}}));
+  if(idx===5) updateTableCount();
+}}
+
+// ── Tabellen-Filter ───────────────────────────────────────────────────────
+function filterTable() {{
+  var q = (document.getElementById("table-search").value||"").toLowerCase().trim();
+  var rows = document.querySelectorAll("#meeting-table tbody tr");
+  var shown = 0;
+  rows.forEach(function(row) {{
+    var text = (row.querySelector(".meeting-name").textContent + " " +
+                row.getAttribute("data-teiln") + " " +
+                row.getAttribute("data-abt") + " " +
+                row.getAttribute("data-vera")).toLowerCase();
+    var vis = !q || text.includes(q);
+    row.style.display = vis ? "" : "none";
+    if(vis) shown++;
   }});
-  document.querySelectorAll(".panel").forEach((p, i) => {{
-    p.classList.toggle("aktiv", i === idx);
-  }});
-  // Plotly neu rendern (für korrekte Größe nach Tab-Wechsel)
-  var plots = document.getElementById("panel-" + idx).querySelectorAll(".plotly-graph-div");
-  plots.forEach(function(p) {{ Plotly.relayout(p, {{}}); }});
+  document.getElementById("table-count").textContent = shown + " von {len(meetings)} Meetings";
+}}
+function updateTableCount() {{
+  var total = document.querySelectorAll("#meeting-table tbody tr").length;
+  document.getElementById("table-count").textContent = total + " von {len(meetings)} Meetings";
+}}
+
+// ── Findings-Interaktion ──────────────────────────────────────────────────
+function toggleFinding(id) {{
+  var body  = document.getElementById("body-"+id);
+  var arrow = document.getElementById("arrow-"+id);
+  var open  = body.style.display==="block";
+  body.style.display  = open ? "none" : "block";
+  arrow.style.transform = open ? "" : "rotate(90deg)";
+  arrow.textContent   = open ? "▸" : "▾";
+}}
+function cycleStatus(e, id) {{
+  e.stopPropagation();
+  var el = document.getElementById("status-"+id);
+  var states = [{{"cls":"offen","lbl":"Offen"}},{{"cls":"klaerung","lbl":"In Klärung"}},{{"cls":"geklaert","lbl":"Geklärt"}}];
+  var cur = states.findIndex(s=>el.classList.contains(s.cls));
+  var next = states[(cur+1)%3];
+  states.forEach(s=>el.classList.remove(s.cls));
+  el.classList.add(next.cls);
+  el.textContent = next.lbl;
 }}
 </script>
 </body>
 </html>"""
 
-with open(OUTPUT, "w", encoding="utf-8") as f:
+with open(OUTPUT,"w",encoding="utf-8") as f:
     f.write(html)
-
-print(f"✅ Dashboard gespeichert → {OUTPUT}")
-print(f"   Öffne mit: open '{OUTPUT}'")
+print(f"✅ Dashboard → {OUTPUT}")
+print(f"   open '{OUTPUT}'")

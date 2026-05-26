@@ -581,11 +581,11 @@
     "learning": null,
     "kategorie": "Weekly / Update",
     "ist_platzhalter": null,
-    "abteilungsuebergreifend": true
+    "abteilungsuebergreifend": false
   },
   {
     "abteilung": "PCC",
-    "name": "01:01:00",
+    "name": "1:1 MA Gespräche",
     "zweck": "20 Minuten Austausch über persönliche Themen, Nachverfolgung individueller Aufgaben",
     "verantwortlich": "TOK",
     "teilnehmer_raw": "TOK + jeweiliger Mitarbeiter",
@@ -600,8 +600,8 @@
     "infofluss": null,
     "status": "Aktiv",
     "learning": null,
-    "kategorie": "Sonstiges",
-    "ist_platzhalter": null,
+    "kategorie": "Einzelgespräch",
+    "ist_platzhalter": true,
     "abteilungsuebergreifend": false
   },
   {
@@ -628,7 +628,7 @@
     "learning": null,
     "kategorie": "Teammeeting",
     "ist_platzhalter": null,
-    "abteilungsuebergreifend": true
+    "abteilungsuebergreifend": false
   },
   {
     "abteilung": "PCC",
@@ -654,7 +654,7 @@
     "learning": null,
     "kategorie": "Sonstiges",
     "ist_platzhalter": null,
-    "abteilungsuebergreifend": true
+    "abteilungsuebergreifend": false
   },
   {
     "abteilung": "PCC",
@@ -786,7 +786,7 @@
     "learning": null,
     "kategorie": "Einzelgespräch",
     "ist_platzhalter": false,
-    "abteilungsuebergreifend": true
+    "abteilungsuebergreifend": false
   },
   {
     "abteilung": "PCS",

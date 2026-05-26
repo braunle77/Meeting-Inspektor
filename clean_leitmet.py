@@ -96,8 +96,8 @@ for idx, row in raw.iterrows():
     learn = clean_val(row["learning"])
 
     # Sonderfall: Excel hat "1:1" als datetime 01:01:00 geparst (TOK/PCC)
-    raw_name = str(row["name"]).strip()
-    if name is None and raw_name in ("01:01:00", "1:01:00"):
+    # clean_val gibt den String zurück, daher prüfen wir name direkt
+    if name in ("01:01:00", "1:01:00", "01:01", "1:01"):
         name = "1:1 MA Gespräche"
 
     if name is not None:
@@ -161,16 +161,37 @@ PLATZHALTER_BEGRIFFE = {
 }
 
 PERSON_ABT = {
-    "Jco": "PC",  "MiG": "PC",  "Ktz": "PC",  "Sez": "PC",
-    "Bre": "PC",  "DrS": "PC",  "Zeller": "PC",
-    "Beb": "PCO", "Fln": "PCO", "Ipa": "PCO", "Zes": "PCO", "LeB": "PCO",
-    "Kip": "PCT", "Krö": "PCT", "Kis": "PCT", "Wud": "PCT", "Bra": "PCT",
-    "Kih": "PCT", "FMD": "PCT", "Tih": "PCT", "SMI": "PCT",
-    "Dem": "PCT", "Bas": "PCT", "CST": "PCT", "Dni": "PCT",
-    "HeT": "PCT", "Fef": "PCT",
-    "TOK": "PCC", "ADA": "PCC", "JFR": "PCC", "MGR": "PCC",
-    "MOS": "PCC", "AWA": "PCC",
+    # PC / PCP
+    "Jco": "PC",  "MiG": "PC",
+    "Ktz": "PC",  "Lav": "PC",  "Rls": "PC",          # PCP Produktmanagement
+    "Sez": "PC",  "Bre": "PC",  "DrS": "PC",           # GF / übergreifend
+    "Zeller": "PC",
+    # PCO
+    "Beb": "PCO", "Ipa": "PCO", "Fln": "PCO",
+    "Zes": "PCO", "LeB": "PCO",
+    # PCT – AC
+    "Kip": "PCT", "Kis": "PCT", "Rre": "PCT",
+    "Lic": "PCT", "Leo": "PCT", "Gam": "PCT", "Ran": "PCT",
+    # PCT – DC
+    "Krö": "PCT", "Dem": "PCT", "Bas": "PCT", "CST": "PCT",
+    # PCT – PC Products
+    "Dni": "PCT", "Bra": "PCT", "Fef": "PCT", "FMD": "PCT",
+    "Wud": "PCT", "Kih": "PCT", "HeT": "PCT",
+    # PCC
+    "TOK": "PCC", "ADA": "PCC", "JFR": "PCC", "SMI": "PCC",
+    "MGR": "PCC", "MOS": "PCC", "AWA": "PCC",
+    # PCS
     "Urk": "PCS", "Zrb": "PCS", "Smt": "PCS", "KTF": "PCS",
+    "Arg": "PCS", "Lke": "PCS", "Tih": "PCS", "Laa": "PCS",
+}
+
+# PCT Subteam-Zuordnung (für Hover / Findings)
+PERSON_SUBTEAM = {
+    "Kis": "AC", "Rre": "AC", "Lic": "AC", "Leo": "AC", "Gam": "AC", "Ran": "AC",
+    "Krö": "DC", "Dem": "DC", "Bas": "DC", "CST": "DC",
+    "Dni": "PC Products", "Bra": "PC Products", "Fef": "PC Products",
+    "FMD": "PC Products", "Wud": "PC Products", "Kih": "PC Products", "HeT": "PC Products",
+    "Kip": "Entwicklung (Leitung)",
 }
 
 RHYTHMUS_MAP = [

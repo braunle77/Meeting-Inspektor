@@ -643,10 +643,24 @@ body{{font-family:"Inter",system-ui,sans-serif;background:#f8fafc;color:#1e293b;
 function showTab(idx) {{
   document.querySelectorAll(".tab-btn").forEach((b,i)=>b.classList.toggle("active",i===idx));
   document.querySelectorAll(".panel").forEach((p,i)=>p.classList.toggle("active",i===idx));
-  var plots = document.getElementById("panel-"+idx).querySelectorAll(".plotly-graph-div");
-  plots.forEach(p=>Plotly.relayout(p,{{}}));
   if(idx===5) updateTableCount();
+  // Plotly-Charts erst nach vollständigem DOM-Update auf korrekte Breite bringen
+  requestAnimationFrame(function() {{
+    setTimeout(function() {{
+      var panel = document.getElementById("panel-"+idx);
+      panel.querySelectorAll(".plotly-graph-div").forEach(function(p) {{
+        Plotly.Plots.resize(p);
+      }});
+    }}, 50);
+  }});
 }}
+
+// Auch bei Browser-Resize alle sichtbaren Charts neu skalieren
+window.addEventListener("resize", function() {{
+  document.querySelectorAll(".panel.active .plotly-graph-div").forEach(function(p) {{
+    Plotly.Plots.resize(p);
+  }});
+}});
 
 // ── Tabellen-Filter ───────────────────────────────────────────────────────
 function filterTable() {{

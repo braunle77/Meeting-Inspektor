@@ -227,7 +227,15 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 
 <script>
 // ══════════════════════════════════════════════════════════════════════════════
-// Anpassen für neue Organisation
+// Optionale Konfiguration – leer lassen für automatische Erkennung
+//
+// PERSON_ABT : überschreibt die automatische Person→Abteilung-Zuweisung
+// ABT_FARBEN : überschreibt die automatischen Abteilungsfarben
+// FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
+// ALIAS_MAP  : Kürzel-Normalisierung (z.B. "karim" → "KTF"); optional
+//
+// Für eine neue Organisation: ALIAS_MAP, PERSON_ABT, FK_LIST leeren;
+// ABT_FARBEN leer lassen – Farben werden automatisch aus der Palette vergeben.
 // ══════════════════════════════════════════════════════════════════════════════
 const ALIAS_MAP = {
   "ipa":"Ipa","jco":"Jco","mig":"MiG","tok":"TOK","kip":"Kip","urk":"Urk",
@@ -269,6 +277,42 @@ const FREQ_W = {
   "täglich":5,"wöchentlich":4,"dreiwöchentlich":3,
   "zweiwöchentlich":2,"monatlich":1,"quartalsweise":0.5,"variabel":0.5
 };
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Dynamische Konfiguration – wird nach dem Laden der Daten berechnet
+// ══════════════════════════════════════════════════════════════════════════════
+const PALETTE = [
+  "#2563eb","#f59e0b","#16a34a","#dc2626","#7c3aed",
+  "#0891b2","#db2777","#65a30d","#ea580c","#6366f1"
+];
+
+// Leitet Person→Abteilung aus den Daten ab (häufigste Abteilung pro Person)
+function autoDerivePERSON_ABT(meetings) {
+  const counts = {};
+  meetings.forEach(m => {
+    m.teilnehmer.forEach(p => {
+      if (!counts[p]) counts[p] = {};
+      counts[p][m.abteilung] = (counts[p][m.abteilung] || 0) + 1;
+    });
+  });
+  const result = {};
+  Object.entries(counts).forEach(([p, c]) => {
+    result[p] = Object.entries(c).sort((a,b) => b[1]-a[1])[0][0];
+  });
+  return result;
+}
+
+// Weist Abteilungen Farben zu: bekannte aus ABT_FARBEN, unbekannte aus Palette
+function buildAbtFarben(depts) {
+  const result = {};
+  depts.forEach((d,i) => { result[d] = ABT_FARBEN[d] || PALETTE[i % PALETTE.length]; });
+  return result;
+}
+
+// Laufzeit-Variablen – werden in showDashboard() befüllt
+let effectivePersonAbt = {};
+let effectiveAbtFarben = {};
+let allDepts = [];
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Rhythmus-Normalisierung
@@ -484,6 +528,11 @@ function tryLoad(text) {
 }
 
 function showDashboard() {
+  // Dynamische Konfiguration aus den geladenen Daten ableiten
+  allDepts = [...new Set(MEETINGS.map(m => m.abteilung))].filter(Boolean).sort();
+  effectivePersonAbt = { ...autoDerivePERSON_ABT(MEETINGS), ...PERSON_ABT };
+  effectiveAbtFarben = buildAbtFarben(allDepts);
+
   document.getElementById("import-screen").style.display = "none";
   document.getElementById("dashboard").style.display = "block";
   renderStats();
@@ -582,12 +631,12 @@ function renderNetzwerk() {
 
   // Build graph
   const nodeSet = new Set();
-  aktive.forEach(m => m.teilnehmer.forEach(t => { if (PERSON_ABT[t]) nodeSet.add(t); }));
+  aktive.forEach(m => m.teilnehmer.forEach(t => { if (effectivePersonAbt[t]) nodeSet.add(t); }));
   const persons = Array.from(nodeSet);
 
   const edgeMap = new Map(); // key "A||B" -> {weight, meetings}
   aktive.forEach(m => {
-    const knoten = m.teilnehmer.filter(t => PERSON_ABT[t]);
+    const knoten = m.teilnehmer.filter(t => effectivePersonAbt[t]);
     const w = FREQ_W[m.rhythmus_klasse] || 0.5;
     for (let i = 0; i < knoten.length; i++) {
       for (let j = i+1; j < knoten.length; j++) {
@@ -643,7 +692,7 @@ function renderNetzwerk() {
 
   // Node traces (one per person for opacity control)
   const nodeTraces = persons.map(p => {
-    const abt = PERSON_ABT[p] || "unbekannt";
+    const abt = effectivePersonAbt[p] || "unbekannt";
     const sub = PERSON_SUBTEAM[p] || "";
     const deg = degree[p] || 0;
     const pMeetings = aktive.filter(m => m.teilnehmer.includes(p)).map(m => m.name);
@@ -657,7 +706,7 @@ function renderNetzwerk() {
       textfont:{size:9, color:"#374151"},
       marker:{
         size: 10 + deg*2.8,
-        color: ABT_FARBEN[abt] || "#9ca3af",
+        color: effectiveAbtFarben[abt] || "#9ca3af",
         symbol: isFk ? "star" : "circle",
         line:{width: isFk ? 2 : 1, color:"white"},
         opacity: 1.0
@@ -667,7 +716,7 @@ function renderNetzwerk() {
     };
   });
 
-  // Dropdown for FK filter
+  // Dropdown for FK filter (nur wenn FK_LIST nicht leer)
   const n_edge = edgeTraces.length;
   const n_node = nodeTraces.length;
 
@@ -688,12 +737,12 @@ function renderNetzwerk() {
   const shownAbts = new Set();
   const legendTraces = [];
   persons.forEach(p => {
-    const abt = PERSON_ABT[p] || "unbekannt";
+    const abt = effectivePersonAbt[p] || "unbekannt";
     if (!shownAbts.has(abt)) {
       shownAbts.add(abt);
       legendTraces.push({
         x:[null], y:[null], mode:"markers",
-        marker:{size:12, color:ABT_FARBEN[abt]||"#9ca3af"},
+        marker:{size:12, color:effectiveAbtFarben[abt]||"#9ca3af"},
         name:abt, showlegend:true, type:"scatter"
       });
     }
@@ -827,24 +876,18 @@ function renderOverlap() {
 // ══════════════════════════════════════════════════════════════════════════════
 function renderAbteilung() {
   const aktive = MEETINGS.filter(m => m.status === "Aktiv");
-  const abtO = ["PC","PCO","PCT","PCTAC/DC","PCTProduct","PCTDC","PCC","PCS"];
+  const xAbts = allDepts; // dynamisch aus geladenen Daten
   const rhyO = ["täglich","wöchentlich","dreiwöchentlich","zweiwöchentlich","monatlich","quartalsweise","variabel"];
-
-  // PCTAC/DC, PCTProduct, PCTDC → in diesem Chart auf PCT zusammenführen
-  const ABT_FALLBACK = { "PCTAC/DC":"PCT","PCTProduct":"PCT","PCTDC":"PCT" };
 
   // abt_rhy[abt][rhy] = [meeting names]
   const abt_rhy = {};
-  abtO.forEach(a => { abt_rhy[a] = {}; rhyO.forEach(r => abt_rhy[a][r] = []); });
+  xAbts.forEach(a => { abt_rhy[a] = {}; rhyO.forEach(r => abt_rhy[a][r] = []); });
   aktive.forEach(m => {
-    const rawA = (m.abteilung || "").trim();
-    const a = abtO.includes(rawA) ? rawA : (ABT_FALLBACK[rawA] || null);
-    if (!a) return; // unbekannte Abteilung → ignorieren
+    const a = (m.abteilung || "").trim();
+    if (!abt_rhy[a]) return; // unbekannte Abteilung → ignorieren
     const rhy = rhyO.includes(m.rhythmus_klasse) ? m.rhythmus_klasse : "variabel";
     abt_rhy[a][rhy].push(m.name);
   });
-
-  const xAbts = abtO; // feste Liste – keine dynamischen Zusätze
 
   const traces = rhyO.map(rhy => ({
     type:"bar",
@@ -876,7 +919,9 @@ function renderAbteilung() {
 // ══════════════════════════════════════════════════════════════════════════════
 function renderSankey() {
   const aktive = MEETINGS.filter(m => m.status === "Aktiv");
-  const abtList = ["PC","PCO","PCT","PCC","PCS","Extern"];
+  // Extern hinzufügen falls benötigt
+  const hasExtern = aktive.some(m => m.teilnehmer.some(t => /extern/i.test(t)));
+  const abtList = hasExtern ? [...allDepts, "Extern"] : [...allDepts];
   const abtIdx = {};
   abtList.forEach((a,i) => abtIdx[a] = i);
 
@@ -888,10 +933,8 @@ function renderSankey() {
       if (PERSON_ABT[t]) abts.add(PERSON_ABT[t]);
     });
     if (m.teilnehmer.some(t => /extern/i.test(t))) abts.add("Extern");
-    // Normalize meeting abteilung
-    const rawAbt = m.abteilung.replace(/PCTAC\/DC|PCTProduct|PCTDC/,"PCT");
-    const normAbt = abtList.includes(rawAbt) ? rawAbt : "PC";
-    abts.add(normAbt);
+    const normAbt = (m.abteilung || "").trim();
+    if (abtList.includes(normAbt)) abts.add(normAbt);
 
     const al = [...abts].filter(a => abtList.includes(a)).sort();
     const w = FREQ_W[m.rhythmus_klasse] || 0.5;
@@ -910,7 +953,7 @@ function renderSankey() {
     tgts.push(abtIdx[b]);
     vals.push(Math.round(v*10)/10);
     lbls.push(`${a} ↔ ${b}: ${v.toFixed(1)} Freq.-Punkte`);
-    const hex = (ABT_FARBEN[a]||"#9ca3af").replace("#","");
+    const hex = (effectiveAbtFarben[a]||"#9ca3af").replace("#","");
     const r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),bv=parseInt(hex.slice(4,6),16);
     linkColors.push(`rgba(${r},${g},${bv},0.35)`);
   });
@@ -921,7 +964,7 @@ function renderSankey() {
       pad:24, thickness:24,
       line:{color:"white",width:0.5},
       label:abtList,
-      color:abtList.map(a => ABT_FARBEN[a]||"#9ca3af"),
+      color:abtList.map(a => effectiveAbtFarben[a]||"#9ca3af"),
       hovertemplate:"<b>%{label}</b><extra></extra>"
     },
     link:{

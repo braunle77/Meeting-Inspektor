@@ -222,7 +222,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
     </div>
   </div>
 
-  <div class="footer" id="footer-text">Erstellt mit Claude Code · Colenet</div>
+  <div class="footer" id="footer-text">Meeting Strukturanalyse</div>
 </div>
 
 <script>
@@ -535,6 +535,12 @@ function showDashboard() {
   effectivePersonAbt = { ...PERSON_ABT, ...autoDerivePERSON_ABT(MEETINGS) };
   effectiveAbtFarben = buildAbtFarben(allDepts);
 
+  // abteilungsuebergreifend nachträglich korrekt berechnen (parseData läuft vor effectivePersonAbt)
+  MEETINGS.forEach(m => {
+    const abts = new Set(m.teilnehmer.map(t => effectivePersonAbt[t]).filter(Boolean));
+    if (abts.size > 1) m.abteilungsuebergreifend = true;
+  });
+
   document.getElementById("import-screen").style.display = "none";
   document.getElementById("dashboard").style.display = "block";
   renderStats();
@@ -555,7 +561,7 @@ function resetToImport() {
     document.getElementById(id).innerHTML = "";
   });
   document.getElementById("table-body").innerHTML = "";
-  renderedTabs = new Set([0]); // reset, except netzwerk will re-render anyway
+  renderedTabs.clear(); // reset – netzwerk wird in showDashboard() direkt neu gerendert
 }
 
 // Track which tabs have been rendered
@@ -584,7 +590,7 @@ function renderStats() {
   document.getElementById("header-meta").textContent =
     `Interaktives Dashboard · ${m.length} Meetings · ${aktive.length} aktiv`;
   document.getElementById("footer-text").textContent =
-    `Erstellt mit Claude Code · Colenet · ${m.length} Meetings`;
+    `Meeting Strukturanalyse · ${m.length} Meetings · ${allDepts.join(", ")}`;
 
   // Warnings
   const warns = [];
@@ -1001,7 +1007,7 @@ function renderTable() {
   const tbody = document.getElementById("table-body");
   tbody.innerHTML = "";
   MEETINGS.forEach(m => {
-    const abtCol = ABT_FARBEN[m.abteilung] || "#9ca3af";
+    const abtCol = effectiveAbtFarben[m.abteilung] || "#9ca3af";
     const teilnStr = m.teilnehmer.join(", ") || "–";
     const vera = m.verantwortlich || "–";
     const statusCls = m.status === "Aktiv" ? "badge-aktiv" : "badge-geplant";

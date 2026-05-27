@@ -217,8 +217,8 @@ textarea#paste-area::placeholder{color:#cbd5e1}
       <div class="ph-icon">💡</div>
       <h3>Auffälligkeiten &amp; Muster</h3>
       <p>Dieser Tab ist für projektspezifische Beobachtungen vorgesehen.<br>
-      Er wird nicht automatisch befüllt – die Muster-Erkennung erfordert<br>
-      menschliche Interpretation oder eine externe KI-Analyse.</p>
+      Die Charts zeigen <em>was</em> da ist – <em>warum</em> etwas auffällt,<br>
+      entscheidet der Mensch, der die Organisation kennt.</p>
     </div>
   </div>
 
@@ -804,7 +804,7 @@ function renderOverlap() {
     z:matrix, x:namen, y:namen,
     text:matrix.map(r => r.map(v => v>0 ? `${(v*100).toFixed(0)}%` : "")),
     texttemplate:"%{text}", textfont:{size:8},
-    colorscale:"RdYlGn_r", zmin:0, zmax:1,
+    colorscale:[[0,"#16a34a"],[0.5,"#fbbf24"],[1,"#dc2626"]], zmin:0, zmax:1,
     hovertext:hover, hoverinfo:"text",
     colorbar:{title:{text:"Jaccard<br>Ähnlichkeit"}}
   };
@@ -830,31 +830,21 @@ function renderAbteilung() {
   const abtO = ["PC","PCO","PCT","PCTAC/DC","PCTProduct","PCTDC","PCC","PCS"];
   const rhyO = ["täglich","wöchentlich","dreiwöchentlich","zweiwöchentlich","monatlich","quartalsweise","variabel"];
 
+  // PCTAC/DC, PCTProduct, PCTDC → in diesem Chart auf PCT zusammenführen
+  const ABT_FALLBACK = { "PCTAC/DC":"PCT","PCTProduct":"PCT","PCTDC":"PCT" };
+
   // abt_rhy[abt][rhy] = [meeting names]
   const abt_rhy = {};
   abtO.forEach(a => { abt_rhy[a] = {}; rhyO.forEach(r => abt_rhy[a][r] = []); });
   aktive.forEach(m => {
-    const a = m.abteilung;
-    if (!abt_rhy[a]) { abt_rhy[a] = {}; rhyO.forEach(r => abt_rhy[a][r] = []); }
-    if (!abt_rhy[a][m.rhythmus_klasse]) abt_rhy[a][m.rhythmus_klasse] = [];
-    abt_rhy[a][m.rhythmus_klasse].push(m.name);
+    const rawA = (m.abteilung || "").trim();
+    const a = abtO.includes(rawA) ? rawA : (ABT_FALLBACK[rawA] || null);
+    if (!a) return; // unbekannte Abteilung → ignorieren
+    const rhy = rhyO.includes(m.rhythmus_klasse) ? m.rhythmus_klasse : "variabel";
+    abt_rhy[a][rhy].push(m.name);
   });
 
-  // Also collect all abteilungen that appear in data but not in abtO
-  const allAbts = [...new Set(aktive.map(m => m.abteilung))];
-  allAbts.forEach(a => {
-    if (!abtO.includes(a) && !abt_rhy[a]) {
-      abt_rhy[a] = {};
-      rhyO.forEach(r => abt_rhy[a][r] = []);
-      aktive.filter(m => m.abteilung === a).forEach(m => {
-        if (!abt_rhy[a][m.rhythmus_klasse]) abt_rhy[a][m.rhythmus_klasse] = [];
-        abt_rhy[a][m.rhythmus_klasse].push(m.name);
-      });
-    }
-  });
-
-  // Use abtO for x-axis, plus any extra
-  const xAbts = [...abtO, ...allAbts.filter(a => !abtO.includes(a))];
+  const xAbts = abtO; // feste Liste – keine dynamischen Zusätze
 
   const traces = rhyO.map(rhy => ({
     type:"bar",

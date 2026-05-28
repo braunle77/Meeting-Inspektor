@@ -184,7 +184,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 <div id="import-screen">
   <div class="import-card">
     <div class="import-logo">Meeting Strukturanalyse</div>
-    <div class="import-sub">Standalone Dashboard · läuft komplett im Browser · kein Python, kein Server</div>
+    <div class="import-sub">Standalone Dashboard · läuft komplett im Browser · kein Python, kein Server <span id="version-badge" style="opacity:.45;font-size:.78rem">v1.6</span></div>
 
     <div class="import-section-title">Schritt 1: Daten aus Confluence kopieren</div>
     <div class="import-instructions">
@@ -305,6 +305,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
+const APP_VERSION = "1.6";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -754,7 +755,7 @@ function renderStats() {
   document.getElementById("header-meta").textContent =
     `Interaktives Dashboard · Stand: ${new Date().toLocaleDateString("de-DE")} · ${m.length} Meetings`;
   document.getElementById("footer-text").textContent =
-    `${m.length} Meetings · Stand: ${new Date().toLocaleDateString("de-DE")}`;
+    `${m.length} Meetings · Stand: ${new Date().toLocaleDateString("de-DE")} · v${APP_VERSION}`;
 
   // Warnings (collapsible)
   const warns = [];

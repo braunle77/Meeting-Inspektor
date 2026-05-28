@@ -790,6 +790,7 @@ function showTab(idx) {
 
   if (!renderedTabs.has(idx)) {
     renderedTabs.add(idx);
+    if (idx === 0) renderNetzwerk();
     if (idx === 1) renderKalender();
     if (idx === 2) renderOverlap();
     if (idx === 3) { renderAbteilung(); abtRendered = true; }
@@ -1531,9 +1532,7 @@ function refreshAllCharts() {
     m.abteilungsuebergreifend = abts.size > 1;
   });
   netCache = null;
-  renderedTabs.delete(0); // Netzwerk-Cache invalidieren
-  renderNetzwerk();
-  renderedTabs.add(0);
+  renderedTabs.delete(0); // Netzwerk wird beim nächsten Tab-Besuch frisch gerendert
   if (sankeyRendered)  { renderedTabs.delete(4); renderSankey(); renderedTabs.add(4); }
   if (abtRendered)     { renderedTabs.delete(3); renderAbteilung(); renderedTabs.add(3); abtRendered = true; }
   renderStats(); // abteilungsuebergreifend-Zählung aktualisieren

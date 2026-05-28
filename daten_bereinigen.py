@@ -14,9 +14,9 @@ Confluence-Import-Workflow:
     3. python3 daten_bereinigen.py --input pfad/zur/export.csv
     ODER: Confluence-Export-Funktion nutzen (Seite > ··· > Export > CSV)
 
-    Erwartete Spaltenreihenfolge:
-    Abteilung | Meeting-Name | Zweck | Verantwortlich | Teilnehmer |
-    Rhythmus | Informationsfluss | Status | Learning
+    Erwartete Spaltenreihenfolge (12 Spalten):
+    Abt. | Meeting-Name | Kategorie | Zweck | Kopf | Teilnehmer |
+    Rhythmus | Informations-Fluss | Status | Abt.übergreifend | Platzhalter / in real mehr | Learnings
 """
 
 import pandas as pd
@@ -24,7 +24,7 @@ import json
 import re
 import argparse
 from pathlib import Path
-from collections import Counter, defaultdict
+from collections import Counter
 
 # ---------------------------------------------------------------------------
 # Pfade & Argumente
@@ -44,26 +44,26 @@ INPUT  = Path(args.input)
 OUTPUT = Path(args.output)
 
 # ---------------------------------------------------------------------------
-# 1. Rohdaten einlesen (xlsx ODER csv)
+# 1. Rohdaten einlesen (xlsx ODER csv/tsv/txt)
 # ---------------------------------------------------------------------------
-if INPUT.suffix.lower() == ".csv":
-    # CSV-Export aus Confluence (Semikolon oder Komma als Trennzeichen)
+EXPECTED_COLS = [
+    "abteilung", "name", "kategorie", "zweck", "verantwortlich",
+    "teilnehmer", "rhythmus", "infofluss", "status",
+    "abt_uebergreifend_raw", "ist_platzhalter_raw", "learning",
+]
+
+if INPUT.suffix.lower() in (".csv", ".tsv", ".txt"):
     try:
         raw = pd.read_csv(INPUT, dtype=str, sep=";", encoding="utf-8-sig")
         if len(raw.columns) < 5:          # Fallback auf Komma
             raw = pd.read_csv(INPUT, dtype=str, sep=",", encoding="utf-8-sig")
     except Exception:
         raw = pd.read_csv(INPUT, dtype=str, encoding="utf-8-sig")
-    # Spalten umbenennen – flexibel per Position (erste 9 Spalten)
-    expected = ["abteilung", "name", "zweck", "verantwortlich",
-                "teilnehmer", "rhythmus", "infofluss", "status", "learning"]
-    raw.columns = expected[:len(raw.columns)] + list(raw.columns[len(expected):])
 else:
     raw = pd.read_excel(INPUT, header=0, dtype=str)
-    raw.columns = [
-        "abteilung", "name", "zweck", "verantwortlich",
-        "teilnehmer", "rhythmus", "infofluss", "status", "learning"
-    ]
+
+# Spalten umbenennen per Position – flexibel, egal wie sie in der Quelldatei heißen
+raw.columns = EXPECTED_COLS[:len(raw.columns)] + list(raw.columns[len(EXPECTED_COLS):])
 
 def clean_val(v):
     """NaN und \xa0 → None; sonst strippen."""
@@ -86,12 +86,15 @@ for idx, row in raw.iterrows():
 
     abt   = clean_val(row["abteilung"])
     name  = clean_val(row["name"])
+    kat   = clean_val(row.get("kategorie"))
     zweck = clean_val(row["zweck"])
     vera  = clean_val(row["verantwortlich"])
     teil  = clean_val(row["teilnehmer"])
     rhy   = clean_val(row["rhythmus"])
     info  = clean_val(row["infofluss"])
     stat  = clean_val(row["status"])
+    abt_q = clean_val(row.get("abt_uebergreifend_raw"))
+    platz = clean_val(row.get("ist_platzhalter_raw"))
     learn = clean_val(row["learning"])
 
     # Sonderfall: Excel hat "1:1" als datetime 01:01:00 geparst (TOK/PCC)
@@ -104,24 +107,29 @@ for idx, row in raw.iterrows():
         if current is not None:
             meetings.append(current)
         current = {
-            "abteilung":      abt,
-            "name":           name,
-            "zweck":          zweck,
-            "verantwortlich": vera,
-            "teilnehmer":     teil,
-            "rhythmus":       rhy,
-            "infofluss":      info,
-            "status":         stat,
-            "learning":       learn,
+            "abteilung":             abt,
+            "name":                  name,
+            "kategorie":             kat,
+            "zweck":                 zweck,
+            "verantwortlich":        vera,
+            "teilnehmer":            teil,
+            "rhythmus":              rhy,
+            "infofluss":             info,
+            "status":                stat,
+            "abt_uebergreifend_raw": abt_q,
+            "ist_platzhalter_raw":   platz,
+            "learning":              learn,
         }
     else:
         # Continuation-Zeile → Felder ergänzen
         if current is None:
             continue
         for field, val in [
-            ("abteilung", abt), ("zweck", zweck), ("verantwortlich", vera),
-            ("teilnehmer", teil), ("rhythmus", rhy), ("infofluss", info),
-            ("status", stat), ("learning", learn),
+            ("abteilung", abt), ("kategorie", kat), ("zweck", zweck),
+            ("verantwortlich", vera), ("teilnehmer", teil), ("rhythmus", rhy),
+            ("infofluss", info), ("status", stat),
+            ("abt_uebergreifend_raw", abt_q), ("ist_platzhalter_raw", platz),
+            ("learning", learn),
         ]:
             if val is None:
                 continue
@@ -139,21 +147,6 @@ if current is not None:
 
 ALIAS_MAP = {
     # Kürzel-Normalisierung: Kleinschreibung → Anzeigename (z.B. "max": "Max")
-}
-
-PLATZHALTER_BEGRIFFE = {
-    "pct alle", "pcs", "pc", "pco", "pcc", "qm", "pm", "extern",
-    "steakholder", "stakeholder", "jeweilige ticketowner",
-    "projektverantwortliche", "kundenbetreuer", "pcd",
-    "tok + jeweiliger mitarbeiter", "optional:",
-}
-
-PERSON_ABT = {
-    # Override Person→Abteilung; leer = automatisch aus den Meeting-Abteilungen abgeleitet
-}
-
-PERSON_SUBTEAM = {
-    # Optionale Subteam-Zuordnung für Hover-Texte
 }
 
 RHYTHMUS_MAP = [
@@ -221,13 +214,6 @@ def parse_teilnehmer(t):
     return ergebnis
 
 
-def hat_platzhalter(teilnehmer_liste):
-    for t in teilnehmer_liste:
-        if t.lower() in PLATZHALTER_BEGRIFFE:
-            return True
-    return False
-
-
 def norm_vera(v):
     if v is None:
         return None
@@ -235,84 +221,45 @@ def norm_vera(v):
     return ", ".join(ALIAS_MAP.get(t.strip().lower(), t.strip()) for t in teile)
 
 
-def kategorisiere(name):
-    n = (name or "").lower()
-    if re.search(r"^1:1|einzelgespr|ma.gesp|mitarbeitergespr", n):
-        return "Einzelgespräch"
-    if re.search(r"^jf |^jf$|jour fixe", n) or " jf" in n:
-        return "Jour Fixe"
-    if re.search(r"teammeeting|team.meeting|standup|stand.up", n):
-        return "Teammeeting"
-    if re.search(r"regeltermin|quarterly|quartal|^3m ", n):
-        return "Regeltermin / Review"
-    if re.search(r"sprint.*review|sprintreview", n):
-        return "Sprint Review"
-    if re.search(r"sitzung", n):
-        return "Sitzung"
-    if re.search(r"weekly|update|pcc-update", n):
-        return "Weekly / Update"
-    return "Sonstiges"
-
 # ---------------------------------------------------------------------------
 # 4. Zusammensetzen
 # ---------------------------------------------------------------------------
-if not PERSON_ABT:
-    _votes: dict = defaultdict(Counter)
-    for m in meetings:
-        abt = m.get("abteilung")
-        if not abt:
-            continue
-        for p in parse_teilnehmer(m.get("teilnehmer") or ""):
-            if p:
-                _votes[p][abt] += 1
-    PERSON_ABT = {p: ctr.most_common(1)[0][0] for p, ctr in _votes.items() if ctr}
-
 result = []
 for m in meetings:
     if m["abteilung"] is None:
         m["abteilung"] = "Unbekannt"
 
-    teilnehmer_liste = parse_teilnehmer(m["teilnehmer"])
-    rhythmus_klasse  = norm_rhythmus_klasse(m["rhythmus"])
-    tage             = extrahiere_tage(m["rhythmus"])
-
-    # Platzhalter: vage Teilnehmer-Angaben ODER explizite Sammelbezeichnungen
-    ist_platzhalter = hat_platzhalter(teilnehmer_liste) or (
-        re.search(r"^1:1", (m["name"] or "").lower())
-        and (m["teilnehmer"] or "").lower() in (
-            "pct alle", "tok + jeweiliger mitarbeiter"
-        )
-    )
-
-    # Abteilungsübergreifend
-    abts = {PERSON_ABT[t] for t in teilnehmer_liste if t in PERSON_ABT}
-    abt_uebergreifend = len(abts) > 1
+    teilnehmer_liste  = parse_teilnehmer(m["teilnehmer"])
+    rhythmus_klasse   = norm_rhythmus_klasse(m["rhythmus"])
+    tage              = extrahiere_tage(m["rhythmus"])
+    ist_platzhalter   = (m.get("ist_platzhalter_raw") or "").strip().lower().startswith("ja")
+    abt_uebergreifend = (m.get("abt_uebergreifend_raw") or "").strip().lower() == "ja"
 
     # Generische Namen mit Abteilungs-Präfix versehen, wenn sie sonst nicht eindeutig sind
     GENERISCHE_NAMEN = {"teammeeting", "reklamation", "standup", "update", "weekly"}
     anzeige_name = m["name"]
     if any(g in (m["name"] or "").lower() for g in GENERISCHE_NAMEN):
-        abt_prefix = m["abteilung"].replace("PCTAC/DC","PCT").replace("PCTProduct","PCT").replace("PCTDC","PCT")
+        abt_prefix = m["abteilung"]
         if not (m["name"] or "").upper().startswith(abt_prefix.upper()):
             anzeige_name = f"{abt_prefix}-{m['name']}"
 
     result.append({
-        "abteilung":             m["abteilung"],
-        "name":                  anzeige_name,
-        "name_original":         m["name"],
-        "zweck":                 m["zweck"],
-        "verantwortlich":        norm_vera(m["verantwortlich"]),
-        "teilnehmer_raw":        m["teilnehmer"],
-        "teilnehmer":            teilnehmer_liste,
-        "teilnehmer_anzahl":     len(teilnehmer_liste),
-        "rhythmus_raw":          m["rhythmus"],
-        "rhythmus_klasse":       rhythmus_klasse,
-        "wochentage":            tage,
-        "infofluss":             m["infofluss"],
-        "status":                norm_status(m["status"]),
-        "learning":              m["learning"],
-        "kategorie":             kategorisiere(m["name"]),
-        "ist_platzhalter":       ist_platzhalter,
+        "abteilung":               m["abteilung"],
+        "name":                    anzeige_name,
+        "name_original":           m["name"],
+        "kategorie":               m.get("kategorie") or "",
+        "zweck":                   m["zweck"],
+        "verantwortlich":          norm_vera(m["verantwortlich"]),
+        "teilnehmer_raw":          m["teilnehmer"],
+        "teilnehmer":              teilnehmer_liste,
+        "teilnehmer_anzahl":       len(teilnehmer_liste),
+        "rhythmus_raw":            m["rhythmus"],
+        "rhythmus_klasse":         rhythmus_klasse,
+        "wochentage":              tage,
+        "infofluss":               m["infofluss"],
+        "status":                  norm_status(m["status"]),
+        "learning":                m["learning"],
+        "ist_platzhalter":         ist_platzhalter,
         "abteilungsuebergreifend": abt_uebergreifend,
     })
 
@@ -330,18 +277,18 @@ print(f"✅  {len(result)} Meetings bereinigt  →  {OUTPUT}\n")
 if args.confluence:
     import csv
     confluence_cols = [
-        ("Abteilung",       lambda m: m["abteilung"]),
-        ("Meeting-Name",    lambda m: m["name"]),
-        ("Kategorie",       lambda m: m["kategorie"]),
-        ("Zweck",           lambda m: (m["zweck"] or "").replace("\n", " ")),
-        ("Verantwortlich",  lambda m: m["verantwortlich"] or ""),
-        ("Teilnehmer",      lambda m: ", ".join(m["teilnehmer"]) or m.get("teilnehmer_raw") or ""),
-        ("Rhythmus",        lambda m: (m["rhythmus_raw"] or "").replace("\n", " ")),
-        ("Informationsfluss", lambda m: (m["infofluss"] or "").replace("\n", " | ")),
-        ("Status",          lambda m: m["status"]),
-        ("Abt.übergreifend",lambda m: "Ja" if m["abteilungsuebergreifend"] else "Nein"),
-        ("Platzhalter",     lambda m: "Ja" if m["ist_platzhalter"] else ""),
-        ("Learnings",       lambda m: m["learning"] or ""),
+        ("Abt.",                       lambda m: m["abteilung"]),
+        ("Meeting-Name",               lambda m: m["name"]),
+        ("Kategorie",                  lambda m: m["kategorie"]),
+        ("Zweck",                      lambda m: (m["zweck"] or "").replace("\n", " ")),
+        ("Kopf",                       lambda m: m["verantwortlich"] or ""),
+        ("Teilnehmer",                 lambda m: ", ".join(m["teilnehmer"]) or m.get("teilnehmer_raw") or ""),
+        ("Rhythmus",                   lambda m: (m["rhythmus_raw"] or "").replace("\n", " ")),
+        ("Informations-Fluss",         lambda m: (m["infofluss"] or "").replace("\n", " | ")),
+        ("Status",                     lambda m: m["status"]),
+        ("Abt.übergreifend",           lambda m: "Ja" if m["abteilungsuebergreifend"] else "Nein"),
+        ("Platzhalter / in real mehr", lambda m: "Ja" if m["ist_platzhalter"] else ""),
+        ("Learnings",                  lambda m: m["learning"] or ""),
     ]
     with open(CONFLUENCE_OUT, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f, delimiter=";")

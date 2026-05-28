@@ -27,20 +27,24 @@ pip install pandas openpyxl networkx plotly pyvis
 
 ## Eingabedatei
 
-Die Quelldatei ist eine Excel-Tabelle (`.xlsx`) mit folgenden Spalten:
+Die Quelldatei ist eine Tabelle (`.xlsx`, `.csv`, `.tsv`, `.txt`) mit folgenden Spalten in dieser Reihenfolge:
 
-| Spalte | Beschreibung |
-|--------|-------------|
-| Abteilung | Kürzel der Organisationseinheit |
-| Meeting-Name | Bezeichnung des Meetings |
-| Zweck | Kurzbeschreibung des Meeting-Inhalts |
-| Verantwortlich | Kürzel der verantwortlichen Person |
-| Teilnehmer | Komma- oder semikolon-getrennte Kürzel |
-| Rhythmus | Freitext (z.B. „wöchentlich", „alle 2 Wochen montags") |
-| Informationsfluss (rein / raus / an wen) | Beschreibung des Informationsflusses |
-| Status | „Aktiv" oder „Geplant" |
-| Learnings | Optionale Notizen/Verbesserungsideen |
+| # | Spalte | Beschreibung |
+|---|--------|-------------|
+| 1 | Abt. | Kürzel der Organisationseinheit |
+| 2 | Meeting-Name | Bezeichnung des Meetings |
+| 3 | Kategorie | z.B. Teammeeting, Jour Fixe, 1:1 |
+| 4 | Zweck | Kurzbeschreibung des Meeting-Inhalts |
+| 5 | Kopf | Kürzel der verantwortlichen Person |
+| 6 | Teilnehmer | Komma- oder semikolon-getrennte Kürzel |
+| 7 | Rhythmus | Freitext (z.B. „wöchentlich", „alle 2 Wochen montags") |
+| 8 | Informations-Fluss | Beschreibung des Informationsflusses |
+| 9 | Status | „Aktiv" oder „Geplant" |
+| 10 | Abt.übergreifend | „Ja" oder „Nein" |
+| 11 | Platzhalter / in real mehr | „Ja" wenn Teilnehmerkreis vage/variabel |
+| 12 | Learnings | Optionale Notizen/Verbesserungsideen |
 
+Spaltennamen in der Datei spielen keine Rolle – die Reihenfolge zählt.  
 Rohdatei bleibt **lokal** und wird nicht ins Repository eingecheckt (`.gitignore`).
 
 ---
@@ -49,11 +53,24 @@ Rohdatei bleibt **lokal** und wird nicht ins Repository eingecheckt (`.gitignore
 
 Für vollständige Datenbereinigung, Normalisierung und ein reich bebildertes HTML-Dashboard.
 
-### 1. Daten bereinigen
+### Start
+
+```bash
+./start.sh /pfad/zur/meetings.xlsx
+```
+
+Prüft Abhängigkeiten, läuft die Pipeline durch und öffnet das Dashboard automatisch.  
+Optionales Flag: `./start.sh /pfad/zur/meetings.xlsx --confluence` erzeugt zusätzlich eine Confluence-CSV.
+
+### Manuell (Einzelschritte)
 
 ```bash
 python3 daten_bereinigen.py --input /pfad/zur/meetings.xlsx
+python3 dashboard_erstellen.py
+open meeting_strukturanalyse.html
 ```
+
+#### Daten bereinigen
 
 Erzeugt: `meetings_bereinigt.json`
 

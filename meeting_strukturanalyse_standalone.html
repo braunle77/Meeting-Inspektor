@@ -1211,6 +1211,59 @@ function updateTableCount() {
   const total = document.querySelectorAll("#meeting-table tbody tr").length;
   document.getElementById("table-count").textContent = total + " von " + MEETINGS.length + " Meetings";
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HTML-Clipboard Parser für Confluence-Paste
+// Wenn der Browser HTML im Clipboard hat (Confluence kopiert immer als HTML),
+// parsen wir die <table> direkt – kein Separator-Rätsel mehr.
+// ══════════════════════════════════════════════════════════════════════════════
+function parseHtmlTable(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  // Confluence kann mehrere Tabellen auf der Seite haben – nimm die erste,
+  // die mindestens 5 Spalten in der ersten Zeile hat (= unsere Meeting-Tabelle)
+  const tables = doc.querySelectorAll('table');
+  let targetTable = null;
+  for (const t of tables) {
+    const firstRow = t.querySelector('tr');
+    if (firstRow && firstRow.querySelectorAll('th, td').length >= 5) {
+      targetTable = t; break;
+    }
+  }
+  if (!targetTable) return null;
+
+  const rows = [];
+  for (const tr of targetTable.querySelectorAll('tr')) {
+    const cells = [];
+    for (const cell of tr.querySelectorAll('th, td')) {
+      // innerText respektiert CSS display:none und Zeilenumbrüche besser als textContent
+      const txt = (cell.innerText || cell.textContent || '')
+        .replace(/\r?\n/g, ' ')   // Zeilenumbrüche innerhalb einer Zelle → Leerzeichen
+        .replace(/\s+/g, ' ')     // mehrfache Leerzeichen normalisieren
+        .trim();
+      cells.push(txt);
+    }
+    if (cells.some(c => c.length > 0)) {
+      rows.push(cells.join('\t'));
+    }
+  }
+  return rows.length > 1 ? rows.join('\n') : null;
+}
+
+// Paste-Interceptor: liest text/html aus Clipboard, konvertiert <table> zu Tab-Text.
+// Muss NACH DOMContentLoaded laufen.
+document.addEventListener('DOMContentLoaded', function() {
+  const ta = document.getElementById('paste-area');
+  if (!ta) return;
+  ta.addEventListener('paste', function(e) {
+    const html = e.clipboardData && e.clipboardData.getData('text/html');
+    if (!html || !html.includes('<table')) return; // kein HTML / keine Tabelle → normales Paste
+    const tabText = parseHtmlTable(html);
+    if (!tabText) return; // Parsing fehlgeschlagen → normales Paste
+    e.preventDefault();
+    ta.value = tabText; // Tab-konvertierten Text in Textarea setzen
+    showStatus('HTML-Tabelle erkannt – klicke „Prüfen & Laden" zum Importieren.', true);
+  });
+});
 </script>
 </body>
 </html>

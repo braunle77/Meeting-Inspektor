@@ -62,6 +62,11 @@ def fig_div(fig):
     return pio.to_html(fig, full_html=False, include_plotlyjs=False,
                        config={"responsive":True,"displayModeBar":True})
 
+def fig_div_net(fig):
+    # Wie fig_div, aber doubleClick deaktiviert → eigene Doppelklick-Logik im JS
+    return pio.to_html(fig, full_html=False, include_plotlyjs=False,
+                       config={"responsive":True,"displayModeBar":True,"doubleClick":False})
+
 # ── VIEW 1: Netzwerk ─────────────────────────────────────────────────────────
 def build_network():
     G = nx.Graph()
@@ -179,7 +184,14 @@ def build_network():
         plot_bgcolor="white", paper_bgcolor="white",
         height=640, margin=dict(l=10,r=140,t=80,b=10),
     )
-    return fig
+    net_meta = {
+        "persons": persons,
+        "edges":   [[persons.index(u), persons.index(v)] for u, v in edges],
+        "nEdge":   n_edge,
+        "nNode":   n_node,
+        "fkList":  list(FK_LIST),
+    }
+    return fig_div_net(fig), net_meta
 
 # ── VIEW 2: Kalender ─────────────────────────────────────────────────────────
 def build_kalender():
@@ -448,7 +460,8 @@ def build_findings_html():
 
 # ── Alle Charts rendern ──────────────────────────────────────────────────────
 print("🔨 Erzeuge Charts…")
-div_netz    = fig_div(build_network())
+div_netz, _net_meta = build_network()
+_net_meta_json      = json.dumps(_net_meta)
 div_kal     = fig_div(build_kalender())
 div_overlap = fig_div(build_overlap())
 div_abt     = fig_div(build_abteilung())
@@ -617,12 +630,12 @@ body{{font-family:"Inter",system-ui,sans-serif;background:#f8fafc;color:#1e293b;
   <button class="tab-btn" onclick="showTab(3)">📊 Abteilungen</button>
   <button class="tab-btn" onclick="showTab(4)">🌊 Informationsfluss</button>
   <button class="tab-btn" onclick="showTab(5)">📋 Alle Meetings</button>
-  <button class="tab-btn" onclick="showTab(6)">💡 Auffälligkeiten</button>
+  <button class="tab-btn" onclick="showTab(6)">🤖 KI Analyse</button>
 </div>
 
 <div id="panel-0" class="panel active">
   <div class="chart-card">{div_netz}</div>
-  <p class="hint">⭐ = Führungskraft · Knotengröße = Meeting-Anzahl · Liniendicke = Frequenz · Person-Filter oben links im Chart</p>
+  <p class="hint">⭐ = Führungskraft · Knotengröße = Meeting-Anzahl · Liniendicke = Frequenz · <b>Klick</b> = Verbindungen hervorheben · <b>Doppelklick</b> = FK markieren / entfernen · Person-Filter oben links</p>
 </div>
 <div id="panel-1" class="panel">
   <div class="chart-card">{div_kal}</div>
@@ -632,7 +645,7 @@ body{{font-family:"Inter",system-ui,sans-serif;background:#f8fafc;color:#1e293b;
   <div class="chart-card">{div_overlap}</div>
   <div class="overlap-legend">
     <span class="ol-item"><span class="ol-dot" style="background:#dc2626"></span><b>Hohe Überschneidung (rot)</b> → ähnliche Teilnehmergruppe → mögliche Redundanz. Frage: Brauchen wir beide Meetings?</span>
-    <span class="ol-item"><span class="ol-dot" style="background:#16a34a"></span><b>Keine Überschneidung (grün)</b> → völlig verschiedene Teilnehmer → kein direkter Informationsaustausch via Meeting. Hinweis: Lücke hier ist <em>kein Befund</em> – zwei Meetings müssen nicht dieselben Personen haben. Fehlende Meetings erkennst du besser im Netzwerk (isolierte Knoten) oder im Tab <b>💡 Auffälligkeiten</b> (dokumentierte Lücken).</span>
+    <span class="ol-item"><span class="ol-dot" style="background:#16a34a"></span><b>Keine Überschneidung (grün)</b> → völlig verschiedene Teilnehmer → kein direkter Informationsaustausch via Meeting. Hinweis: Lücke hier ist <em>kein Befund</em> – zwei Meetings müssen nicht dieselben Personen haben. Fehlende Meetings erkennst du besser im Netzwerk (isolierte Knoten) oder im Tab <b>🤖 KI Analyse</b> (dokumentierte Lücken).</span>
   </div>
 </div>
 <div id="panel-3" class="panel">
@@ -699,6 +712,98 @@ function updateTableCount() {{
   var total = document.querySelectorAll("#meeting-table tbody tr").length;
   document.getElementById("table-count").textContent = total + " von {len(meetings)} Meetings";
 }}
+
+// ── Netzwerk: Klick-Interaktion ───────────────────────────────────────────
+(function() {{
+  var NET     = {_net_meta_json};
+  var fkSet   = new Set(NET.fkList);
+  var activeNode = null;
+  var clickTimer = null;
+
+  function getNetDiv() {{
+    return document.querySelector("#panel-0 .plotly-graph-div");
+  }}
+
+  function opAll() {{
+    var ops = [];
+    for (var i = 0; i < NET.nEdge + NET.nNode; i++) ops.push(1.0);
+    return ops;
+  }}
+
+  function opForNode(pIdx) {{
+    var nbrs = new Set([pIdx]);
+    var edgeOps = [], nodeOps = [];
+    for (var i = 0; i < NET.edges.length; i++) {{
+      var e = NET.edges[i];
+      if (e[0] === pIdx || e[1] === pIdx) {{
+        nbrs.add(e[0]); nbrs.add(e[1]);
+        edgeOps.push(0.85);
+      }} else {{
+        edgeOps.push(0.04);
+      }}
+    }}
+    for (var j = 0; j < NET.persons.length; j++) {{
+      nodeOps.push(nbrs.has(j) ? 1.0 : 0.07);
+    }}
+    return edgeOps.concat(nodeOps);
+  }}
+
+  function applyOps(ops) {{
+    var d = getNetDiv();
+    if (!d) return;
+    var idxs = [], vals = [];
+    for (var i = 0; i < ops.length; i++) {{ idxs.push(i); vals.push(ops[i]); }}
+    Plotly.restyle(d, {{"opacity": vals}}, idxs);
+  }}
+
+  function toggleFK(name) {{
+    var d = getNetDiv();
+    if (!d) return;
+    var pIdx = NET.persons.indexOf(name);
+    if (pIdx < 0) return;
+    var ti = NET.nEdge + pIdx;
+    if (fkSet.has(name)) {{
+      fkSet.delete(name);
+      Plotly.restyle(d, {{"marker.symbol": ["circle"], "marker.line.width": [1]}}, [ti]);
+    }} else {{
+      fkSet.add(name);
+      Plotly.restyle(d, {{"marker.symbol": ["star"], "marker.line.width": [2]}}, [ti]);
+    }}
+  }}
+
+  function setup() {{
+    var d = getNetDiv();
+    if (!d) return;
+    d.on("plotly_click", function(ev) {{
+      if (!ev || !ev.points || !ev.points.length) return;
+      var name = ev.points[0].data.name;
+      if (!name || NET.persons.indexOf(name) < 0) return;
+      if (clickTimer) {{
+        clearTimeout(clickTimer);
+        clickTimer = null;
+        toggleFK(name);        // Doppelklick → FK toggle
+      }} else {{
+        var n = name;
+        clickTimer = setTimeout(function() {{
+          clickTimer = null;
+          if (activeNode === n) {{
+            activeNode = null;
+            applyOps(opAll());  // zweiter Klick auf gleichen Knoten → reset
+          }} else {{
+            activeNode = n;
+            applyOps(opForNode(NET.persons.indexOf(n)));  // Verbindungen zeigen
+          }}
+        }}, 280);
+      }}
+    }});
+  }}
+
+  if (document.readyState === "complete") {{
+    setTimeout(setup, 250);
+  }} else {{
+    window.addEventListener("load", function() {{ setTimeout(setup, 250); }});
+  }}
+}})();
 
 // ── Findings-Interaktion ──────────────────────────────────────────────────
 function toggleFinding(id) {{

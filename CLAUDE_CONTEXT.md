@@ -24,18 +24,12 @@ nachkorrigieren als auf Anweisungen warten. Er verwendet das Tool in echten Mana
 
 | Datei | Beschreibung |
 |-------|-------------|
-| `meeting_strukturanalyse_standalone.html` | **Haupt-Entwicklungsdatei** – Standalone-Dashboard, läuft komplett im Browser |
-| `dashboard_erstellen.py` | Python-Pipeline: erzeugt HTML aus `meetings_bereinigt.json` |
-| `daten_bereinigen.py` | Python: normalisiert Excel/CSV → `meetings_bereinigt.json` |
-| `start.sh` | Shell-Wrapper: Abhängigkeiten prüfen + Pipeline starten |
-| `meetings_bereinigt.json` | Bereinigte Daten (Zwischenschritt Python-Pipeline) |
-| `meeting_strukturanalyse.html` | Fertiges Pipeline-Dashboard (generiert, nicht manuell bearbeiten) |
-| `confluence_tabelle.csv` | Export für Confluence |
+| `meeting_strukturanalyse_standalone.html` | **Einzige Entwicklungsdatei** – Standalone-Dashboard, läuft komplett im Browser |
 | `LeitMet.csv` / `meetingstruk.csv` | Rohdaten – **lokal, nie ins Repo!** |
 
-**Primäre Entwicklungsdatei: `meeting_strukturanalyse_standalone.html`**
-Der Python-Modus (`dashboard_erstellen.py`) spiegelt die Standalone-Features mit Verzögerung.
-Neue Features immer zuerst im Standalone implementieren.
+Die Python-Pipeline (`daten_bereinigen.py`, `dashboard_erstellen.py`, `start.sh`,
+`meetings_bereinigt.json`, `meeting_strukturanalyse.html`) wurde in Session 6 entfernt –
+der Standalone ersetzt sie vollständig (CSV-Upload, Paste, alle Features + mehr).
 
 ---
 
@@ -304,12 +298,8 @@ Für dynamische Änderungen nutzt der Nutzer den Personen-Tab (localStorage).
 
 ## Offene Punkte / mögliche nächste Schritte
 
-- **README aktualisieren:** Noch veraltet – Tab „Informationsfluss" müsste zu „Kommunikation"
-  geändert werden, Personen-Tab fehlt, Sonder-Kategorien fehlen
 - **KI Analyse Tab (Tab 6):** Aktuell ein leerer Placeholder. Langfristig für kommentierte,
   KI-generierte Beobachtungen gedacht (Redundanzen, Kommunikationslücken, hohe Meeting-Last)
-- **Python-Pipeline nachziehen:** `dashboard_erstellen.py` kennt noch keine SPECIAL_DEPTS
-  und keinen Personen-Tab – für den Pipeline-Modus irrelevant, aber der Tab fehlt dort
 - **Doppelklick-FK-Toggle im Netzwerk** setzt FK nicht im Personen-Tab zurück
   (fkSet wird geupdated, aber renderPersonenTab wird nicht aufgerufen)
 
@@ -328,6 +318,7 @@ Für dynamische Änderungen nutzt der Nutzer den Personen-Tab (localStorage).
    ```
 4. Nie Branches – direkt auf `main`
 5. Nie `--no-verify` oder force-push
+6. **Nur die Standalone-Datei** – keine Python-Dateien mehr im Repo
 
 ---
 
@@ -349,6 +340,13 @@ Für dynamische Änderungen nutzt der Nutzer den Personen-Tab (localStorage).
 - Netzwerk: Platzhalter-Knoten herausgefiltert
 - KI Analyse Tab: alte Hardcoded-Findings durch neutralen Placeholder ersetzt
 - Footer vereinfacht
+
+### Session 6 (Pipeline-Ablösung)
+- **Python-Pipeline komplett entfernt:** `daten_bereinigen.py`, `dashboard_erstellen.py`,
+  `start.sh`, `meetings_bereinigt.json`, `meeting_strukturanalyse.html` gelöscht
+- Standalone ist ab jetzt die einzige Datei – Workflow: Öffnen → Paste oder CSV-Upload → fertig
+- CSV-Parser war bereits robust für Excel-Exports (BOM, CRLF, Semikolon-Erkennung)
+- README komplett neu geschrieben (Standalone-only, Tab 7 Personen, SPECIAL_DEPTS dokumentiert)
 
 ### Session 5 (Confluence-Paste + Personen-Tab)
 - **Sankey umbenannt:** Tab „Informationsfluss" → „Kommunikation", Titel erklärt Nicht-Direktionalität

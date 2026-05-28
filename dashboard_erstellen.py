@@ -133,21 +133,8 @@ def build_network():
             showlegend=False, opacity=1.0,
         ))
 
-    # Updatemenus: eine Schaltfläche pro FK + "Alle"
     n_edge = len(edge_traces)
     n_node = len(node_traces)
-
-    def make_ops(fk):
-        nbrs = set(G.neighbors(fk)) | {fk}
-        e_ops = [0.7 if fk in (u,v) else 0.04 for u,v in edges]
-        n_ops = [1.0 if p in nbrs else 0.08 for p in persons]
-        return e_ops + n_ops
-
-    alle_ops = [1.0]*(n_edge+n_node)
-    buttons = [dict(label="Alle", method="restyle", args=[{"opacity": alle_ops}])]
-    for fk in FK_LIST:
-        if fk in G:
-            buttons.append(dict(label=fk, method="restyle", args=[{"opacity": make_ops(fk)}]))
 
     # Legende: eine Dummy-Trace pro Abteilung
     legend_traces = []
@@ -166,27 +153,15 @@ def build_network():
 
     fig = go.Figure(data=all_traces)
     fig.update_layout(
-        title=dict(text="Kommunikationsnetzwerk – Wer trifft wen?", font=dict(size=16,family="Inter")),
-        updatemenus=[dict(
-            type="dropdown", direction="down",
-            x=0.01, xanchor="left", y=1.12, yanchor="top",
-            bgcolor="white", bordercolor="#e5e7eb", font=dict(size=12),
-            buttons=buttons,
-            active=0,
-            pad={"r":10,"t":5},
-        )],
-        annotations=[dict(
-            text="<b>Personen-Filter:</b>", x=0.01, xanchor="left",
-            y=1.15, yanchor="top", xref="paper", yref="paper",
-            showarrow=False, font=dict(size=11,color="#6b7280"),
-        )],
+        title=dict(text="Kommunikationsnetzwerk – Wer trifft wen?", font=dict(size=16)),
+        font=dict(family="DM Sans, system-ui, sans-serif"),
         showlegend=True,
         legend=dict(title="Abteilung", itemsizing="constant", x=1.01, y=1),
         hovermode="closest",
         xaxis=dict(showgrid=False,zeroline=False,showticklabels=False),
         yaxis=dict(showgrid=False,zeroline=False,showticklabels=False),
         plot_bgcolor="white", paper_bgcolor="white",
-        height=640, margin=dict(l=10,r=140,t=80,b=10),
+        height=620, margin=dict(l=10,r=140,t=50,b=10),
     )
     net_meta = {
         "persons": persons,
@@ -219,7 +194,8 @@ def build_kalender():
         hovertext=hvrs,hoverinfo="text",
     ))
     fig.update_layout(
-        title=dict(text="Meeting-Kalender – Wann findet was statt?",font=dict(size=16,family="Inter")),
+        title=dict(text="Meeting-Kalender – Wann findet was statt?",font=dict(size=16)),
+        font=dict(family="DM Sans, system-ui, sans-serif"),
         xaxis=dict(title="Wochentag",categoryorder="array",categoryarray=tage_o,
                    showgrid=True,gridcolor="#f3f4f6"),
         yaxis=dict(title="Rhythmus",categoryorder="array",categoryarray=rhy_o,
@@ -259,7 +235,8 @@ def build_overlap():
     ))
     fig.update_layout(
         title=dict(text="Teilnehmer-Überschneidung – Welche Meetings sind ähnlich?",
-                   font=dict(size=16,family="Inter")),
+                   font=dict(size=16)),
+        font=dict(family="DM Sans, system-ui, sans-serif"),
         height=max(520, n * 22),
         margin=dict(l=210,r=100,t=60,b=180),
         xaxis=dict(tickangle=-45,tickfont=dict(size=9)),
@@ -287,7 +264,8 @@ def build_abteilung():
     fig = go.Figure(data=traces)
     fig.update_layout(
         barmode="stack",
-        title=dict(text="Meeting-Dichte pro Abteilung",font=dict(size=16,family="Inter")),
+        title=dict(text="Meeting-Dichte pro Abteilung",font=dict(size=16)),
+        font=dict(family="DM Sans, system-ui, sans-serif"),
         xaxis_title="Abteilung",yaxis_title="Anzahl Meetings",legend_title="Rhythmus",
         plot_bgcolor="white",paper_bgcolor="white",
         height=440,margin=dict(l=60,r=20,t=60,b=60),
@@ -321,7 +299,7 @@ def build_sankey():
         # Farbige Links (Quell-Abteilungsfarbe, gut sichtbar)
         hex_col = ABT_FARBEN.get(a,"#9ca3af").lstrip("#")
         r,g,b_c = int(hex_col[0:2],16),int(hex_col[2:4],16),int(hex_col[4:6],16)
-        link_colors.append(f"rgba({r},{g},{b_c},0.35)")
+        link_colors.append(f"rgba({r},{g},{b_c},0.25)")
     fig = go.Figure(go.Sankey(
         node=dict(pad=24,thickness=24,
                   line=dict(color="white",width=0.5),
@@ -335,10 +313,11 @@ def build_sankey():
     ))
     fig.update_layout(
         title=dict(text="Informationsfluss zwischen Abteilungen · Flussdicke = gewichtete Meeting-Frequenz",
-                   font=dict(size=15,family="Inter")),
+                   font=dict(size=15)),
+        font=dict(family="DM Sans, system-ui, sans-serif"),
         height=440,margin=dict(l=20,r=20,t=60,b=30),
     )
-    return fig
+    return fig, link_colors
 
 # ── VIEW 6: Tabelle ──────────────────────────────────────────────────────────
 def build_tabelle_html():
@@ -410,7 +389,9 @@ _net_meta_json      = json.dumps(_net_meta)
 div_kal     = fig_div(build_kalender())
 div_overlap = fig_div(build_overlap())
 div_abt     = fig_div(build_abteilung())
-div_sankey  = fig_div(build_sankey())
+_sankey_fig, _sankey_link_colors = build_sankey()
+div_sankey  = fig_div(_sankey_fig)
+_sankey_link_colors_json = json.dumps(_sankey_link_colors)
 html_tabelle  = build_tabelle_html()
 html_findings = build_findings_html()
 print("   ✓ Alle Views erzeugt")
@@ -590,13 +571,13 @@ body{{font-family:"DM Sans",system-ui,sans-serif;background:#f8faf9;color:#1a2e2
 {"<div class='warnings'><button class='warn-toggle' onclick='toggleWarning()'>⚠ " + str(warn_count) + (" Hinweis" if warn_count == 1 else " Hinweise") + " ▾</button><ul id='warn-list'>" + warn_html + "</ul></div>" if warn_html else ""}
 
 <div class="tab-bar">
-  <button class="tab-btn active" onclick="showTab(0)">🕸 Netzwerk</button>
-  <button class="tab-btn" onclick="showTab(1)">📅 Kalender</button>
-  <button class="tab-btn" onclick="showTab(2)">🔴 Überschneidungen</button>
-  <button class="tab-btn" onclick="showTab(3)">📊 Abteilungen</button>
-  <button class="tab-btn" onclick="showTab(4)">🌊 Informationsfluss</button>
-  <button class="tab-btn" onclick="showTab(5)">📋 Alle Meetings</button>
-  <button class="tab-btn" onclick="showTab(6)">🤖 KI Analyse</button>
+  <button class="tab-btn active" onclick="showTab(0)">Netzwerk</button>
+  <button class="tab-btn" onclick="showTab(1)">Kalender</button>
+  <button class="tab-btn" onclick="showTab(2)">Überschneidungen</button>
+  <button class="tab-btn" onclick="showTab(3)">Abteilungen</button>
+  <button class="tab-btn" onclick="showTab(4)">Informationsfluss</button>
+  <button class="tab-btn" onclick="showTab(5)">Alle Meetings</button>
+  <button class="tab-btn" onclick="showTab(6)">KI Analyse</button>
 </div>
 
 <div id="panel-0" class="panel active">
@@ -769,6 +750,56 @@ function updateTableCount() {{
   }} else {{
     window.addEventListener("load", function() {{ setTimeout(setup, 250); }});
   }}
+}})();
+
+// ── Sankey: Hover-Kontrast ────────────────────────────────────────────────
+(function() {{
+  var BASE_COLORS = {_sankey_link_colors_json};
+
+  function toOpacity(color, op) {{
+    return color.replace(/,[\d.]+\)$/, "," + op + ")");
+  }}
+
+  function getSankeyDiv() {{
+    return document.querySelector("#panel-4 .plotly-graph-div");
+  }}
+
+  function setup() {{
+    var d = getSankeyDiv();
+    if (!d) return;
+    d.on("plotly_hover", function(ev) {{
+      if (!ev || !ev.points || !ev.points.length) return;
+      var pt = ev.points[0];
+      // Links haben eine source-Eigenschaft, Nodes nicht
+      if (pt.source === undefined) return;
+      var idx = pt.pointNumber;
+      var cols = BASE_COLORS.map(function(c, i) {{
+        return toOpacity(c, i === idx ? 0.92 : 0.04);
+      }});
+      Plotly.restyle(d, {{"link.color": [cols]}}, [0]);
+    }});
+    d.on("plotly_unhover", function() {{
+      Plotly.restyle(d, {{"link.color": [BASE_COLORS]}}, [0]);
+    }});
+  }}
+
+  // Sankey-Panel kann beim ersten Öffnen noch nicht initialisiert sein
+  var _sankeyReady = false;
+  var _origShowTab = window.showTab;  // wird nach diesem Block definiert – daher Patch nach Load
+  window.addEventListener("load", function() {{
+    setTimeout(function() {{
+      setup();
+      _sankeyReady = true;
+    }}, 400);
+    // Auch beim Tab-Wechsel initialisieren (falls Panel vorher nie sichtbar war)
+    document.querySelectorAll(".tab-btn").forEach(function(btn, i) {{
+      btn.addEventListener("click", function() {{
+        if (i === 4 && !_sankeyReady) {{
+          setTimeout(function() {{ setup(); _sankeyReady = true; }}, 300);
+        }}
+      }});
+    }});
+  }});
 }})();
 
 // ── Warning Toggle ────────────────────────────────────────────────────────

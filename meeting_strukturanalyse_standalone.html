@@ -256,6 +256,8 @@ textarea#paste-area::placeholder{color:#cbd5e1}
     <p class="hint">Balkenhöhe = Anzahl distinct Meeting-Formate (nicht frequenzgewichtet) · Farbe = Rhythmus · Hover = Meeting-Namen</p>
     <div class="chart-card" id="chart-status" style="margin-top:20px"></div>
     <p class="hint">Anteil je Status-Kategorie pro Abteilung (100 % = alle Meetings der Abteilung) · Hover = absolute Anzahl</p>
+    <div class="chart-card" id="chart-rhythmus" style="margin-top:20px"></div>
+    <p class="hint">Balkenhöhe = Anzahl Meeting-Formate je Rhythmus-Klasse · Farbe = Kategorie · von hochfrequent (links) nach selten (rechts)</p>
   </div>
   <div id="panel-4" class="panel">
     <div class="chart-card" id="chart-sankey"></div>
@@ -317,7 +319,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "30.05.2026 11:24";
+const APP_VERSION = "30.05.2026 11:30";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -1217,6 +1219,7 @@ function renderAbteilung() {
   };
   Plotly.newPlot("chart-abt", traces, layout, {responsive:true, displayModeBar:false});
   renderStatusVerteilung();
+  renderRhythmusChart();
 }
 
 function renderStatusVerteilung() {
@@ -1261,6 +1264,43 @@ function renderStatusVerteilung() {
     legend: { title: { text: "Status" } },
     plot_bgcolor: "white", paper_bgcolor: "white",
     height: 380, margin: { l: 60, r: 20, t: 60, b: 60 }
+  }, { responsive: true, displayModeBar: false });
+}
+
+function renderRhythmusChart() {
+  if (!MEETINGS.length) return;
+
+  const rhyO = ["täglich","wöchentlich","dreiwöchentlich","zweiwöchentlich","monatlich","quartalsweise","variabel"];
+
+  // Alle Kategorien sammeln
+  const allKat = [...new Set(MEETINGS.map(m => (m.kategorie || "Unbekannt").trim()))].sort();
+
+  // Zählen: rhy_kat[rhy][kat] = Anzahl
+  const rhy_kat = {};
+  rhyO.forEach(r => { rhy_kat[r] = {}; });
+  MEETINGS.forEach(m => {
+    const rhy = rhyO.includes(m.rhythmus_klasse) ? m.rhythmus_klasse : "variabel";
+    const kat = (m.kategorie || "Unbekannt").trim();
+    rhy_kat[rhy][kat] = (rhy_kat[rhy][kat] || 0) + 1;
+  });
+
+  const traces = allKat.map((kat, i) => ({
+    type: "bar", name: kat,
+    x: rhyO,
+    y: rhyO.map(r => rhy_kat[r][kat] || 0),
+    marker: { color: PALETTE[i % PALETTE.length] },
+    hovertemplate: "<b>%{x}</b><br>" + kat + ": %{y} Meetings<extra></extra>"
+  }));
+
+  Plotly.newPlot("chart-rhythmus", traces, {
+    barmode: "stack",
+    title: { text: "Meetings nach Rhythmus und Kategorie", font: { size: 16, family: "DM Sans, system-ui, sans-serif" } },
+    font: { family: "DM Sans, system-ui, sans-serif" },
+    xaxis: { title: "Rhythmus (von hochfrequent → selten)" },
+    yaxis: { title: "Anzahl Meeting-Formate", showgrid: true, gridcolor: "#f3f4f6" },
+    legend: { title: { text: "Kategorie" } },
+    plot_bgcolor: "white", paper_bgcolor: "white",
+    height: 380, margin: { l: 60, r: 20, t: 60, b: 80 }
   }, { responsive: true, displayModeBar: false });
 }
 

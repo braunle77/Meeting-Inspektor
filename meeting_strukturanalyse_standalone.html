@@ -327,7 +327,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "30.05.2026 12:28";
+const APP_VERSION = "30.05.2026 12:36";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -1089,8 +1089,9 @@ function _plotNetzwerk(firstRender) {
 // ══════════════════════════════════════════════════════════════════════════════
 function renderKalender() {
   const aktive = MEETINGS.filter(m => m.status === "Aktiv");
-  const tageO = ["Mo","Di","Mi","Do","Fr","—"];
-  const rhyO  = ["variabel","quartalsweise","monatlich","zweiwöchentlich","dreiwöchentlich","wöchentlich","täglich"];
+  const rhyO   = ["variabel","quartalsweise","monatlich","zweiwöchentlich","dreiwöchentlich","wöchentlich","täglich"];
+  // Numerische X-Positionen für die Wochentage (nötig für Dodge-Offsets)
+  const tagIdx = { "Mo":0, "Di":1, "Mi":2, "Do":3, "Fr":4, "—":5 };
 
   // Aggregiere nach (tag, rhythmus, abteilung) – ein Datenpunkt pro Kombination
   const agg = {};
@@ -1104,11 +1105,28 @@ function renderKalender() {
     });
   });
 
+  // Pro Zelle (tag, rhythmus): welche Abteilungen gibt es? → Dodge-Reihenfolge
+  const cellAbts = {}; // key: tag||rhy → sortierte Abt-Liste
+  Object.values(agg).forEach(({tag, rhy, abt}) => {
+    const k = tag + "||" + rhy;
+    if (!cellAbts[k]) cellAbts[k] = [];
+    if (!cellAbts[k].includes(abt)) cellAbts[k].push(abt);
+  });
+  Object.values(cellAbts).forEach(list => list.sort()); // deterministisch
+
   // Einen Plotly-Trace pro Abteilung → automatische Legende
   const byAbt = {};
   Object.values(agg).forEach(({tag, rhy, abt, meetings}) => {
+    const list = cellAbts[tag + "||" + rhy];
+    const n    = list.length;
+    const pos  = list.indexOf(abt); // 0-basiert
+
+    // Horizontaler Versatz: bei n=1 → 0; bei n=2 → ±0.22; bei n≥3 → symmetrisch verteilt
+    const step   = n > 1 ? Math.min(0.22, 0.44 / (n - 1)) : 0;
+    const offset = (pos - (n - 1) / 2) * step;
+
     if (!byAbt[abt]) byAbt[abt] = { xs:[], ys:[], szs:[], txts:[], hvrs:[] };
-    byAbt[abt].xs.push(tag);
+    byAbt[abt].xs.push(tagIdx[tag] + offset);  // numerisch + Versatz
     byAbt[abt].ys.push(rhy);
     byAbt[abt].szs.push(14 + meetings.length * 16);
     byAbt[abt].txts.push(String(meetings.length));
@@ -1140,7 +1158,14 @@ function renderKalender() {
   Plotly.newPlot("chart-kalender", traces, {
     title: { text: "Meeting-Kalender – Wann findet was statt?", font: { size: 16, family: "DM Sans, system-ui, sans-serif" } },
     font: { family: "DM Sans, system-ui, sans-serif" },
-    xaxis: { title: "Wochentag", categoryorder: "array", categoryarray: tageO, showgrid: true, gridcolor: "#f3f4f6" },
+    xaxis: {
+      title: "Wochentag",
+      tickmode: "array",
+      tickvals: [0, 1, 2, 3, 4, 5],
+      ticktext: ["Mo", "Di", "Mi", "Do", "Fr", "—"],
+      range: [-0.65, 5.65],
+      showgrid: true, gridcolor: "#f3f4f6", zeroline: false
+    },
     yaxis: { title: "Rhythmus", categoryorder: "array", categoryarray: rhyO, showgrid: true, gridcolor: "#f3f4f6" },
     legend: { title: { text: "Abteilung" }, orientation: "v", x: 1.02, xanchor: "left" },
     plot_bgcolor: "white", paper_bgcolor: "white",

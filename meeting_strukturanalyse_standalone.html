@@ -327,7 +327,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "30.05.2026 12:37";
+const APP_VERSION = "30.05.2026 14:47";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -381,10 +381,17 @@ const PALETTE = [
 function autoDerivePERSON_ABT(meetings) {
   const counts = {};
   meetings.forEach(m => {
+    // Teilnehmer-Liste auswerten
     m.teilnehmer.forEach(p => {
       if (!counts[p]) counts[p] = {};
       counts[p][m.abteilung] = (counts[p][m.abteilung] || 0) + 1;
     });
+    // Verantwortliche/r ebenfalls berücksichtigen – steht manchmal nicht in Personen
+    const v = m.verantwortlich;
+    if (v) {
+      if (!counts[v]) counts[v] = {};
+      counts[v][m.abteilung] = (counts[v][m.abteilung] || 0) + 1;
+    }
   });
   const map = {}, confidence = {};
   Object.entries(counts).forEach(([p, c]) => {
@@ -1530,10 +1537,11 @@ function renderPersonenTab() {
   SPECIAL_DEPTS.forEach(sd => deptPersons[sd.key] = []);
 
   // Personen aus MEETINGS sammeln (unique, geordnet nach Name)
+  // Verantwortliche/r wird explizit einbezogen – steht manchmal nicht in Teilnehmer
   // Generische Platzhalter-Namen (Leerzeichen = Beschreibung, keine Abkürzung) herausfiltern
   const allPersons = [...new Set(
     MEETINGS.filter(m => !m.ist_platzhalter)
-            .flatMap(m => m.teilnehmer)
+            .flatMap(m => [...m.teilnehmer, m.verantwortlich].filter(Boolean))
             .filter(p => !p.includes(" "))   // "Jeweilige Ticketowner", "PC-Interessierte" etc.
   )].sort();
 

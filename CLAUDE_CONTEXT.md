@@ -1,7 +1,7 @@
 # CLAUDE_CONTEXT – Meeting-Strukturanalyse Standalone
 
 > Lese diese Datei am Anfang jeder neuen Session vollständig.  
-> Sie ist lokal (gitignored) und enthält den vollständigen Kontext.
+> Sie ist lokal (gitignored) und enthält den vollständigen Projektkkontext.
 
 ---
 
@@ -13,9 +13,10 @@ GitHub: https://github.com/braunle77/Organisations-Meeting-Informationsfluss
 Confluence: https://colenet.atlassian.net/wiki/spaces/KI/pages/2500427777
 
 Reines Browser-Tool: Nutzer öffnet HTML → Paste aus Confluence → fertig.  
-Kein Python, kein Server, kein Setup.
+Kein Python, kein Server, kein Setup. Vollständig offline-fähig.
 
-**Aktueller Stand:** `APP_VERSION = "30.05.2026 16:42"` (ca. 1940 Zeilen)
+**Aktueller Stand:** `APP_VERSION = "03.06.2026 10:00"` (~2600 Zeilen)  
+**Testdaten:** `testdaten.tsv` im Repo – 73 fiktive Meetings, vollständige Beispielorganisation
 
 ---
 
@@ -24,6 +25,7 @@ Kein Python, kein Server, kein Setup.
 - `LeitMet.csv`, `meetingstruk.csv` bleiben lokal, **nie** ins Repository
 - **Keine Echtdaten in Commits**
 - localStorage speichert nur Config (Zuordnungen, FK-Liste), niemals Meeting-Inhalte
+- `wertOverrides` werden bei **neuem Daten-Import gelöscht** (gehören zur jeweiligen Datensession)
 
 ---
 
@@ -37,19 +39,19 @@ Kein Python, kein Server, kein Setup.
 | `zweck` | Zweck | Freitext | |
 | `verantwortlich` | Verantwortlich | Kürzel (via canonAbbr) | |
 | `teilnehmer` | Personen | Komma-sep. Kürzel (via canonAbbr) | Split auf `,;\n\r` |
-| `rhythmus_klasse` | Rhythmus | normalisiert auf 7 Klassen | |
+| `rhythmus_klasse` | Rhythmus | normalisiert auf 7 Klassen | inkl. Wochentag-Extraktion |
+| `wochentage` | (aus Rhythmus) | Array z.B. `["Mo","Do"]` | `extractWochentage()` |
 | `dauer` | Dauer | Minuten (Integer, null=leer) | optional |
 | `infofluss` | Informationsfluss | Freitext | |
-| `wert` | Wirkung (1–4) | Integer 1–4 (null=leer) | optional; Selbsteinschätzung Kopf |
+| `wert` | Wirkung (1–4) | Integer 1–4 (null=leer) | optional; editierbar im Dashboard |
 | `status` | Status | "Aktiv" / "Geplant" | |
 | `abteilungsuebergreifend` | Abteilungsübergreifend | Boolean | nachträglich aus effectivePersonAbt berechnet |
 | `ist_platzhalter` | Platzhalter | Boolean | |
 | `learning` | Learnings | Freitext | |
 
-**Spalten-Reihenfolge in Confluence** (für Paste-Hinweis):  
-`Abteilung · Meetingname · Kategorie · Zweck · Verantwortlich · Personen · Rhythmus · Dauer · Informationsfluss · Wirkung (1–4) · Status · Abteilungsübergreifend · Platzhalter · Learnings`
-
-**Kein `multiplikator`** – gleichartige Meetings als separate Zeilen gepflegt.
+**Wochentag im Rhythmus-Feld kodieren:**  
+`"wöchentlich Mo"` → rhythmus_klasse=`wöchentlich`, wochentage=`["Mo"]`  
+`"wöchentlich Di Do"` → wochentage=`["Di","Do"]` (Standup 2×/Woche)
 
 ---
 
@@ -68,106 +70,150 @@ const FREQ_MONTHLY = {
 
 ## Tab-Struktur (11 Tabs, data-tab 0–10)
 
-Navigation via `data-tab`-Attribut (nicht DOM-Index). `showTab(idx)` selektiert per `querySelector(".panel[data-tab='idx']")`.
+Navigation via `data-tab`-Attribut. `showTab(idx)` nutzt `querySelector(".panel[data-tab='${idx}']")` – **nicht** DOM-Index.
 
-| data-tab | Tab | Panel-ID | Render-Funktion |
-|---|---|---|---|
-| 0 | Personen | panel-7 | `renderPersonenTab()` |
-| 1 | Netzwerk | panel-0 | `renderNetzwerk()` |
-| 2 | Abteilungen | panel-3 | `renderAbteilung()` (inkl. Toggle Anzahl/Freq.) |
-| 3 | Kalender | panel-1 | `renderKalender()` |
-| 4 | Kommunikation | panel-4 | `renderSankey()` + `renderChord()` |
-| 5 | Überschneidungen | panel-2 | `renderOverlap()` + Top-Paare-Liste |
-| 6 | Engpass | panel-8 | `renderEngpass()` + `renderZeitlast()` |
-| 7 | Zeitverteilung | panel-9 | `renderTreemap()` (cornerradius:6) |
-| 8 | Wirkung | panel-10 | `renderWirkungsMatrix()` |
-| 9 | Alle Meetings | panel-5 | `renderTable()` |
-| 10 | KI Analyse | panel-6 | statisch (Placeholder) |
+| data-tab | Tab | Panel-ID | Render-Funktion | Besonderheit |
+|---|---|---|---|---|
+| 0 | Personen | panel-7 | `renderPersonenTab()` | Erster Tab nach Import; adaptive Spalten |
+| 1 | Netzwerk | panel-0 | `renderNetzwerk()` | d3-force + Plotly |
+| 2 | Abteilungen | panel-3 | `renderAbteilung()` | Horizontal + Toggle Anzahl/Freq. |
+| 3 | Kalender | panel-1 | `renderKalender()` | Wochentag-basiert |
+| 4 | Kommunikation | panel-4 | `renderSankey()` + `renderChord()` | Bidirektional, D3-Chord darunter |
+| 5 | Überschneidungen | panel-2 | `renderOverlap()` | Top-Paare-Liste oben, Heatmap darunter |
+| 6 | Engpass | panel-8 | `renderEngpass()` + `renderZeitlast()` | h/Monat pro Person |
+| 7 | Zeitverteilung | panel-9 | `renderTreemap()` | cornerradius:6, uniformtext hide |
+| 8 | Wirkung | panel-10 | `renderWirkungsMatrix()` | Scatter: Zeit vs. Wirkung, Quadranten |
+| 9 | Alle Meetings | panel-5 | `renderTable()` | Wirkung editierbar per Klick |
+| 10 | KI Analyse | panel-6 | statisch | Placeholder für KI-Ausbaustufe |
 
 **Lazy-Rendering:** `renderedTabs` Set. `showDashboard()` ruft `showTab(0)` (Personen) auf.  
-**Info-Overlay:** Jeder Tab hat ℹ-Button → `showTabInfo(idx)` → Modal mit Erklärung.  
-**Colenet-Logo:** Base64-PNG im Header, rechts, klickbar → colenet.de (neuer Tab).
+**`refreshAllCharts()`** invalidiert alle renderedTabs und re-rendert direkt Tab 0 (Personen).
 
 ---
 
-## Wichtige Funktionen und Konzepte
+## Info-Overlay
 
-### `canonAbbr(s)` (lokal in `parseData()`)
-Case-insensitive Deduplication von Kürzeln innerhalb eines Parse-Aufrufs.  
-`"urk"` → nach `normalizeAlias` → `"Urk"` → `canonAbbr` stellt konsistente Schreibweise sicher.
+Jeder Tab hat einen ℹ-Button (`class="tab-info-btn"`) oben rechts im Panel.  
+Klick → `showTabInfo(idx)` → Modal mit drei Abschnitten:  
+- Was zeigt dieses Chart?  
+- Worauf achten?  
+- Folgefragen  
 
-### `normalizeAlias(raw)`
-Sucht in `ALIAS_MAP` (standardmäßig leer), sonst: ersten Buchstaben uppercase.
+`TAB_INFO`-Konstante enthält Inhalte für alle 11 Tabs (idx 0–10).
 
-### `effectivePersonAbt`
-```javascript
-effectivePersonAbt = { ...autoDerivePERSON_ABT(MEETINGS).map, ...PERSON_ABT };
-// danach patcht applyStoredConfig() localStorage-Overrides drüber
+---
+
+## Header
+
+Teal-Header mit:
+- Links: App-Titel + Subtitle (Stand, Anzahl Meetings)
+- Rechts: `[↩ Neue Daten laden]` Button + Colenet-Logo (klickbar → colenet.de neuer Tab)
+
+**Colenet-Logo:** Base64-PNG direkt eingebettet (`data:image/png;base64,...`), vollständig offline.  
+In weißem Wrapper-Div (für Safari-Kompatibilität – kein padding auf img-Tag direkt).
+
+---
+
+## Personen-Tab – Adaptives Layout
+
+`renderPersonenTab()` und `_buildDeptCol()`:
+- Sortierung nach Personenanzahl absteigend (vollste Abteilung zuerst)
+- Leere Abteilungen werden nicht angezeigt
+- `SPECIAL_DEPTS` (Stabsfunktion, Geschäftsleitung, Extern, Kunden) nur wenn nicht schon als reguläre Abteilung vorhanden → **kein Duplikat-Problem**
+- Abteilungen mit ≥9 Personen: 2-spaltiges Inner-Grid (`grid-template-columns:1fr 1fr`)
+- `dept-col`: `flex:0 0 auto; align-self:flex-start` → nur so breit wie nötig, keine gleichhohen Spalten
+- `person-chip`: kompakter (padding 3px 7px)
+
+---
+
+## Abteilungen-Tab
+
+- **Hauptchart:** Horizontal (wie Engpass), 4 Rhythmus-Gruppen statt 7 Farben:
+  - Hochfrequent (täglich+wöchentlich) → Teal
+  - Regelmäßig (zwei-+dreiwöchentlich) → Blau
+  - Selten (monatlich+quartalsweise) → Olivgrün
+  - Variabel → Grau
+- **Toggle:** Pill-Buttons `[ Anzahl ] [ Freq./Monat ]` – schaltet Y-Achse
+- **Darunter:** Rhythmus-Chart (vertikal, informativer), dann Status-Chart
+
+---
+
+## Kommunikation-Tab
+
+Zwei Charts untereinander:
+1. **Sankey:** Bidirektionale Flows, Nodes nach Gesamtvolumen sortiert (am stärksten vernetzt oben). Richtung nicht bedeutsam.
+2. **Chord-Diagramm (D3.js):** Bidirektional, Hover-Highlight (aktives Band voll, andere 0.08). Bogengröße = Gesamtvolumen.
+
+---
+
+## Zeitverteilung-Tab (Treemap)
+
+- `marker.cornerradius: 6` (Plotly-native, ab 2.35.2)
+- Kategorie-Knoten: volle Farbe (dunkler Rahmen)
+- Meeting-Knoten: `lightenColor(color, 0.42)` (heller innen)
+- `texttemplate: "%{label}"` – nur Label, keine Stunden im Feld
+- `uniformtext: { mode:"hide", minsize:12 }` – kein Pixelmatsch in kleinen Kacheln
+- `ids`-Array mit Präfixen `cat::` / `m::` – verhindert Label-Kollision
+
+---
+
+## Wirkungsmatrix-Tab
+
+- X = Stunden/Monat, Y = Wirkung 1–4, Bubble = Teilnehmerzahl, Farbe = Kategorie
+- Quadranten: Bereichernd / Effizient halten / Hinterfragen / Optimieren
+- X-Trennlinie = Median der Zeitlast (dynamisch)
+- `displayModeBar: false`
+
+---
+
+## localStorage-Struktur
+
+```json
+{
+  "personAbt": { "Maa": "Business Unit" },
+  "fkList": ["Maa", "Bsc"],
+  "wertOverrides": { "Business Unit||Leitungsmeeting||0": 3 }
+}
 ```
 
-### `autoDerivePERSON_ABT(meetings)`
-Läuft über **alle** Meetings (inkl. Platzhalter). Verantwortliche/r wird explizit einbezogen.  
-Gibt der Person die Abteilung, in der sie am häufigsten vorkommt.
+**Wichtig:** `wertOverrides` werden bei neuem Daten-Import (in `showDashboard()`) gelöscht. Nur `personAbt` und `fkList` bleiben sessions-übergreifend erhalten.
 
-### `_rawCandidates` in `renderPersonenTab()`
-```javascript
-// KEIN Platzhalter-Filter – echte Personen stehen auch in Platzhalter-Meetings (PR #13)
-const _rawCandidates = [...new Set(
-  MEETINGS.flatMap(m => [...m.teilnehmer, m.verantwortlich].filter(Boolean))
-)].sort();
-```
+---
 
-### `saveConfig()` / `applyStoredConfig()`
-localStorage-Key: `"meeting-strukturanalyse-config"`  
-Aktuelles Format: `{ personAbt: {...}, fkList: [...] }`
+## Wichtige Konstanten und Funktionen
 
 ### `SPECIAL_DEPTS`
-Feste Sonder-Spalten im Personen-Tab:  
-`["Stabsfunktion", "Geschäftsleitung", "Extern", "Kunden"]`
+```javascript
+const SPECIAL_DEPTS = [
+  { key:"Stabsfunktion", color:"#5b8fa8", cssClass:"special-stab", title:"Stab / andere interne Funktion" },
+  { key:"Geschäftsleitung", color:"#7c6bab", cssClass:"special-gl", title:"Geschäftsleitung" },
+  { key:"Extern", color:"#6b7280", cssClass:"special-extern", title:"Externe Partner / Dienstleister" },
+  { key:"Kunden", color:"#c2607a", cssClass:"special-kunden", title:"Kunden" }
+]
+```
 
-### `findCol(headers, candidates)`
-Matcht Header-Spalten case-insensitiv via `h.includes(c)`.  
-`"Wirkung (1–4)"` matcht auf Candidate `"wirkung"` ✓
+### `RHYTHM_GROUPS` (für Abteilungen-Chart)
+```javascript
+const RHYTHM_GROUPS = [
+  { label:"Hochfrequent", rhythms:["täglich","wöchentlich"], color:"#59B2A5" },
+  { label:"Regelmäßig", rhythms:["zweiwöchentlich","dreiwöchentlich"], color:"#2176ae" },
+  { label:"Selten", rhythms:["monatlich","quartalsweise"], color:"#7c9e44" },
+  { label:"Variabel", rhythms:["variabel"], color:"#9ca3af" }
+];
+const RHYTHM_TO_GROUP = {}; // { "täglich": {label:"Hochfrequent",...}, ... }
+```
 
----
+### `lightenColor(hex, factor)`
+Hilfsfunktion: Hex-Farbe aufhellen. `lightenColor("#59B2A5", 0.42)` → rgb-String.
 
-## Alle bisherigen PRs (alle gemergt außer wo anders angegeben)
+### `showTabInfo(idx)` / `closeTabInfo()`
+Info-Modal für Tab idx öffnen/schließen.
 
-| PR | Branch | Was |
-|---|---|---|
-| #1 | initial | Standalone-HTML Dashboard |
-| #2 | feat/engpass-karte | Engpass-Karte Tab 8 |
-| #3 | feat/status-verteilung | Status-Verteilung Chart in Tab 3 |
-| #4 | feat/rhythmus-chart | Rhythmus×Kategorie-Chart in Tab 3 |
-| #5 | feat/dauer-feld | Dauer-Spalte (Minuten) im Parser + Tabelle |
-| #6 | fix/kalender-farben | Kalender-Tab Abteilungsfarben + Legende |
-| #7 | feat/kategorie-treemap | Zeitverteilung Treemap in Tab 9 |
-| #8 | feat/zeitlast-fk | Zeitlast pro Person in Stunden/Monat (Tab 8) |
-| #9 | fix/kalender-dodge | Dodge-Versatz bei überlappenden Abteilungskreisen |
-| #10 | fix/spalten-hinweis | Spalten-Hinweis im Paste-Dialog (14 Spalten) |
-| #11 | fix/personen-vera-sichtbar | Verantwortliche/r auch im Personen-Tab sichtbar |
-| #12 | fix/personen-space-filter | Personen mit Leerzeichen (Jana Müller) sichtbar |
-| #13 | fix/personen-platzhalter | Personen aus Platzhalter-Meetings sichtbar |
-| #14 | feat/wert-feld | Wirkung (1–4) in Tab 5 anzeigen + editieren + localStorage |
-| #15 | feat/wirkungs-matrix | Scatter-Chart Zeit vs. Wirkung in Tab 10 |
-| #16 | fix/treemap-label-kollision | Zeitverteilung bricht nicht bei Namenskollision (ids-Array) |
-| #17 | fix/wirkung-legende-overflow | Legende in Tab 10 überlappt nicht mehr den Hinweis-Text |
-| #18 | feat/abt-toggle | Pill-Toggle Anzahl / Freq./Monat in Tab Abteilungen |
-| #19 | feat/ux-refactor | Tab-Reihenfolge neu (data-tab), visuelle Konsistenz (Treemap, Wirkung) |
-| #20 | feat/chart-redesign | Abteilungen horizontal + 4 Rhythmusgruppen + Zeitverteilung Varianten |
-| #21 | feat/tab-info | ℹ-Overlay pro Tab + Überschneidungen Top-Paare + Sunburst entfernt |
-| #22 | fix/ux-feedback | 7 UX-Korrekturen: Legende, Reihenfolge, Sankey-Text, wertOverrides, KI-Text |
-| #23 | fix/treemap-corners-sankey | native cornerradius + Sankey-Beschreibung bidirektional |
-| #24 | feat/chord-sankey-redesign | Chord-Diagramm (D3) + Sankey nach Vernetzungsgrad sortiert + Treemap-Text |
-| #25 | fix/sankey-syntax | Syntaxfehler im Sankey-Hover behoben (?.0.92 → ? 0.92 : 0.04) |
-| #26 | fix/chord-size-hover | Chord-Größe (clientWidth) + D3-Tooltip statt SVG-title |
-| #27 | feat/chord-hover-highlight | Hover-Highlight auf Chord-Bändern + Label-Clipping behoben |
-| #28 | fix/sankey-revert-sort | Sankey bidirektional zurück, Nodes nach Vernetzungsgrad sortiert |
-| #29 | feat/colenet-logo | Colenet-Logo als Base64-PNG in Header eingebettet |
-| #30 | fix/logo-png | WebP → PNG (WebP wurde nicht gerendert) |
-| #31 | fix/logo-safari | Padding auf Wrapper-Div (Safari-Fix) |
-| – | direkt | Logo-Position: ganz rechts, Button links daneben |
-| – | direkt | Logo klickbar → colenet.de in neuem Tab |
+### `setAbtMode(mode)`
+Toggle zwischen `"anzahl"` und `"freq"` im Abteilungen-Tab. Ruft `renderAbtChart()` auf.
+
+### `renderChord(flussSymm, abtList, abtIdx)`
+D3.js Chord-Diagramm in `chart-chord`. Hover-Highlight: aktives Band 0.92, andere 0.08.
 
 ---
 
@@ -177,176 +223,58 @@ Matcht Header-Spalten case-insensitiv via `h.includes(c)`.
 main  ←  feat/<name>  (gh pr create → squash merge)
 ```
 - Kein Direkt-Commit auf `main` für neue Features
-- Jeder Branch = genau ein Feature
-- **APP_VERSION-Timestamp** (`DD.MM.YYYY HH:MM`) im letzten Commit vor dem Merge setzen
-- PRs via `gh pr create`
-- Lokal mergen: `gh pr merge <nr> --squash --delete-branch && git checkout main && git pull`
+- **APP_VERSION-Timestamp** (`DD.MM.YYYY HH:MM`) im letzten Commit setzen
+- `gh pr merge <nr> --squash --delete-branch && git checkout main && git pull`
 
 ---
 
-## Gruppe 3 – Erledigt ✅
+## Alle PRs (alle gemergt)
 
-`feat/wert-feld` (PR #14) und `feat/wirkungs-matrix` (PR #15) sind gemergt.  
-Fixes: `fix/treemap-label-kollision` (PR #16), `fix/wirkung-legende-overflow` (PR #17).
-
----
-
-### feat/wert-feld ✅ (PR #14)
-
-**Ziel:** `wert` (Wirkung 1–4) im Alle-Meetings-Tab (Tab 5) anzeigen und editierbar machen.
-
-**Tabellen-Header** – neue Spalte nach `<th title="Dauer in Minuten">Min.</th>`:
-```html
-<th title="Empfundener Wert 1–4 (Selbsteinschätzung)">Wirkg.</th>
-```
-
-**Tabellen-Zelle** – klickbar, zeigt Füllkreise:
-```javascript
-const wertDisplay = m.wert
-  ? '●'.repeat(m.wert) + '○'.repeat(4 - m.wert)
-  : '–';
-// <td class="wert-cell" data-idx="${idx}" ...>${wertDisplay}</td>
-```
-
-**Editier-Logik:**
-- Klick auf Wert-Zelle → kleines Inline-Dropdown mit Optionen: –, 1, 2, 3, 4
-- Auswahl → `MEETINGS[idx].wert = neuerWert` → Zelle aktualisieren → `saveConfig()`
-- Alternativ: Popover analog zum Personen-Popover
-
-**Persistenz in localStorage** – neues Feld `wertOverrides`:
-```json
-{
-  "personAbt": { ... },
-  "fkList": [ ... ],
-  "wertOverrides": { "Abteilung||Meetingname||idx": 3 }
-}
-```
-Key-Aufbau: `m.abteilung + "||" + m.name + "||" + idx` (idx für Eindeutigkeit bei gleichnamigen Meetings).
-
-**`saveConfig()` erweitern:**
-```javascript
-const wertOverrides = {};
-MEETINGS.forEach((m, i) => {
-  if (m.wert !== null) wertOverrides[m.abteilung+"||"+m.name+"||"+i] = m.wert;
-});
-// dann wertOverrides in localStorage-JSON aufnehmen
-```
-
-**`applyStoredConfig()` erweitern:**
-```javascript
-if (cfg.wertOverrides) {
-  MEETINGS.forEach((m, i) => {
-    const key = m.abteilung+"||"+m.name+"||"+i;
-    if (cfg.wertOverrides[key] != null) m.wert = cfg.wertOverrides[key];
-  });
-}
-```
+| PR | Was |
+|---|---|
+| #1 | Standalone-HTML Dashboard |
+| #2–#13 | Diverse Features + Fixes (Engpass, Treemap, Kalender, Personen-Fixes) |
+| #14 | Wirkung (1–4) in Tab Alle Meetings – editierbar + localStorage |
+| #15 | Wirkungsmatrix (Scatter-Chart Zeit vs. Wirkung) |
+| #16 | Treemap: ids-Array gegen Label-Kollision |
+| #17 | Wirkungsmatrix Legende-Overflow fix |
+| #18 | Abteilungen: Pill-Toggle Anzahl/Freq. |
+| #19 | UX-Refactor: Tab-Reihenfolge (data-tab), visuelle Konsistenz |
+| #20 | Abteilungen horizontal + 4 Rhythmusgruppen; Zeitverteilung Varianten |
+| #21 | ℹ-Overlay pro Tab; Überschneidungen Top-Paare; Sunburst entfernt |
+| #22 | 7 UX-Fixes: Legende, Reihenfolge Charts, Sankey-Text, wertOverrides, KI-Text |
+| #23 | Treemap cornerradius (Plotly-native); Sankey bidirektional beschrieben |
+| #24 | Chord-Diagramm (D3); Sankey nach Vernetzungsgrad sortiert; Treemap-Text |
+| #25 | Syntaxfehler Sankey-Hover (?.0.92 → ? 0.92 : 0.04) |
+| #26 | Chord: Größe aus clientWidth; D3-Tooltip |
+| #27 | Chord: Hover-Highlight Bänder; Label-Clipping behoben |
+| #28 | Sankey: bidirektional zurück, Nodes nach Vernetzungsgrad |
+| #29–#31 | Colenet-Logo: Base64-PNG, Safari-Fix, Position |
+| #32 | Personen-Tab: adaptives Layout, Sortierung, 2-Spalten, kein Duplikat |
 
 ---
 
-### feat/wirkungs-matrix (C3) ✅ (PR #15)
+## Offene Punkte
 
-**Ziel:** Scatter-Chart – welche Meetings kosten viel Zeit und bringen wenig Wirkung?
+### Confluence-Seite (Nächste Schritte)
+- KI-Analyse Tab (Tab 10) mit echten Beobachtungen befüllen
 
-**Neuer Tab 10 "Wirkung"**
-
-HTML (Tab-Button + Panel analog zu den bestehenden):
-```html
-<button class="tab-btn" onclick="showTab(10)">Wirkung</button>
-...
-<div class="panel" id="panel-10">
-  <div id="chart-wirkung" style="height:520px"></div>
-</div>
-```
-
-**`showTab()`** erweitern:
-```javascript
-if (idx === 10) renderWirkungsMatrix();
-```
-
-**`renderWirkungsMatrix()`:**
-```javascript
-function renderWirkungsMatrix() {
-  // Nur Meetings mit dauer UND wert einbeziehen
-  const data = MEETINGS.filter(m => m.dauer !== null && m.wert !== null);
-  if (!data.length) {
-    // Fallback-Meldung rendern
-    return;
-  }
-  // X = Stunden/Monat: m.dauer * FREQ_MONTHLY[m.rhythmus_klasse] / 60
-  // Y = m.wert (1–4)
-  // Bubble-Größe = m.teilnehmer_anzahl (mind. 1)
-  // Farbe = Kategorie (PALETTE per katIndex)
-  // Hover = Name, Abteilung, Rhythmus, Dauer, Wert
-  // Quadranten-Annotations (Plotly shapes + annotations):
-  //   Q1 (viel Zeit, hohe Wirkung) = "Effizient halten"
-  //   Q2 (wenig Zeit, hohe Wirkung) = "Bereichernd"
-  //   Q3 (wenig Zeit, geringe Wirkung) = "Hinterfragen"
-  //   Q4 (viel Zeit, geringe Wirkung) = "Optimieren"
-}
-```
-
-**Quadranten-Mittelpunkt:** X-Median der sichtbaren Daten (nicht fix), Y = 2.5 (Mitte 1–4).
-
-**`refreshAllCharts()` erweitern:** `renderedTabs.delete(10)` hinzufügen.
-
----
-
-## Alle-Meetings-Tabelle – aktueller HTML-Stand
-
-```html
-<thead><tr>
-  <th>Abteilung</th><th>Meeting</th><th>Kategorie</th><th>Rhythmus</th>
-  <th title="Dauer in Minuten">Min.</th>
-  <!-- HIER kommt neu: <th title="Empfundener Wert 1–4">Wirkg.</th> -->
-  <th>Verantwortl.</th><th>Teilnehmer</th><th>Status</th>
-  <th title="Abteilungsübergreifend">Übergr.</th><th>Zweck</th><th>Learnings</th>
-</tr></thead>
-```
-
----
-
-## localStorage-Struktur
-
-**Aktuell:**
-```json
-{ "personAbt": { "Urk": "IT" }, "fkList": ["Urk"] }
-```
-
-**Nach feat/wert-feld:**
-```json
-{ "personAbt": { "Urk": "IT" }, "fkList": ["Urk"], "wertOverrides": { "IT||Daily-Standup||0": 3 } }
-```
-
----
-
-## Kalender-Dodge (PR #9 – Referenz)
-
-X-Achse numerisch, Offset pro Abteilung bei Kollision:
-```javascript
-const tagIdx = { "Mo":0, "Di":1, "Mi":2, "Do":3, "Fr":4, "—":5 };
-// tickvals: [0,1,2,3,4,5], ticktext: ["Mo","Di","Mi","Do","Fr","—"], range: [-0.65, 5.65]
-```
-
----
-
-## Gruppe 4 – Später (nicht jetzt)
+### Gruppe 4 – Bewusst zurückgestellt
 
 | Feature | Anmerkung |
 |---|---|
-| D2 – Reifegrad-Indikator | Spider-Chart, komplex, niedriger Sofortwert |
-| C1/C2 – Zweck-Typisierung | Braucht neues Feld `zweck_typ` + Daten-Nacherfassung |
-| E1 – Längsschnitt | Eigene Architektur für mehrere Datensätze nötig |
+| D2 – Reifegrad-Indikator | Spider-Chart, komplex |
+| C1/C2 – Zweck-Typisierung | Braucht neues Feld + Daten-Nacherfassung |
+| E1 – Längsschnitt | Eigene Architektur für mehrere Datensätze |
 
 ---
 
-## Bekannte gelöste Bugs (zur Info)
+## Gelöste Bugs (Referenz)
 
-- ~~Personen aus Platzhalter-Meetings unsichtbar~~ → PR #13
-- ~~Verantwortliche/r fehlte in Personen-Tab~~ → PR #11
-- ~~Namen mit Leerzeichen (Jana Müller) gefiltert~~ → PR #12
-- ~~Kalender-Kreise überlappend~~ → PR #9 (Dodge)
-- ~~Diagnose-Box zeigte `else if (dept)` Fall nicht~~ → kein eigener PR nötig (nach PR #13 obsolet)
-- ~~Zeitverteilung bricht bei Meetingname = Kategoriename~~ → PR #16 (ids-Array)
-- ~~Legende in Wirkungsmatrix überlappt Hinweis-Text~~ → PR #17
-- ~~Doppelklick FK-Toggle synchronisiert Personen-Tab nicht~~ → war bereits implementiert (renderedTabs.delete(7))
+- ~~Treemap bricht bei Meetingname = Kategoriename~~ → PR #16
+- ~~Wirkungsmatrix Legende überlappt Hinweis~~ → PR #17
+- ~~Sankey-Hover Syntaxfehler (?.0.92)~~ → PR #25
+- ~~Chord zu klein / kein Hover~~ → PR #26/27
+- ~~Geschäftsleitung doppelt im Personen-Tab~~ → PR #32
+- ~~wertOverrides aus alter Session werden übernommen~~ → PR #22
+- ~~Logo in Safari unsichtbar~~ → PR #30/31

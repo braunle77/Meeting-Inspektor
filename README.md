@@ -19,7 +19,7 @@ Das Dashboard ist als Gesprächsgrundlage für Management-Reviews gedacht, nicht
 
 ## Schnellstart
 
-1. `meeting_strukturanalyse_standalone.html` im Browser öffnen
+1. `meeting-inspector.html` im Browser öffnen
 2. Daten laden – zwei Wege:
 
 **Option A – Paste aus Confluence:**
@@ -113,7 +113,7 @@ const ABT_FARBEN  = { /* Override Abteilungsfarben; leer = auto      */  };
 
 | Datei | Beschreibung |
 |-------|-------------|
-| `meeting_strukturanalyse_standalone.html` | Dashboard – die einzige Datei, die du brauchst |
+| `meeting-inspector.html` | Dashboard – die einzige Datei, die du brauchst |
 | `CLAUDE_CONTEXT.md` | Entwicklungs-Kontext für Claude-Sessions |
 
 Quelldaten (`*.xlsx`, `*.csv`) sind in `.gitignore` ausgeschlossen.

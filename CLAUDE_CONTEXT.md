@@ -7,7 +7,7 @@
 
 ## Projekt-Überblick
 
-**Einzige relevante Datei:** `meeting_strukturanalyse_standalone.html`  
+**Einzige relevante Datei:** `meeting-inspector.html`  
 Lokaler Pfad: `/Users/leivbraun/Documents/Claude Code/Organisations-Meeting-Informationsfluss/`  
 GitHub: https://github.com/braunle77/Organisations-Meeting-Informationsfluss  
 Confluence: https://colenet.atlassian.net/wiki/spaces/KI/pages/2500427777

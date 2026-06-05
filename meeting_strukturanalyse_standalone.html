@@ -404,7 +404,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
   <div id="panel-0" class="panel" data-tab="1">
     <button class="tab-info-btn" onclick="showTabInfo(1)">ℹ</button>
     <div class="chart-card" id="chart-netzwerk"></div>
-    <p class="hint" id="hint-netzwerk">Knotengröße = Meeting-Anzahl · Liniendicke = Frequenz · Farbe = Abteilung · Klick = Verbindungen hervorheben · Doppelklick = FK-Status umschalten</p>
+    <p class="hint" id="hint-netzwerk">Knotengröße = Anzahl Meetings · Liniendicke = Verbindungsstärke (normalisiert nach Meetinggröße – große Meetings erzeugen schwächere Paarverbindungen) · Farbe = Abteilung · Klick = Verbindungen hervorheben · Doppelklick = FK-Status</p>
   </div>
   <div id="panel-1" class="panel" data-tab="3">
     <button class="tab-info-btn" onclick="showTabInfo(3)">ℹ</button>
@@ -1409,7 +1409,11 @@ function renderNetzwerk() {
   const edgeMap = new Map();
   aktive.forEach(m => {
     const knoten = m.teilnehmer.filter(t => effectivePersonAbt[t]);
-    const w = FREQ_W[m.rhythmus_klasse] || 0.5;
+    const rawW = FREQ_W[m.rhythmus_klasse] || 0.5;
+    // Normalisierung nach Meetinggröße: je mehr Personen, desto schwächer die Paarverbindung.
+    // Ein 50-Personen-All-Hands erzeugt schwächere Einzelverbindungen als ein 5-Personen-Teammeeting.
+    const n = knoten.length;
+    const w = n <= 2 ? rawW : rawW / Math.sqrt(n - 1);
     for (let i = 0; i < knoten.length; i++) {
       for (let j = i+1; j < knoten.length; j++) {
         const [a, b] = [knoten[i], knoten[j]].sort();
@@ -1498,7 +1502,7 @@ function _plotNetzwerk(firstRender) {
       text:[p], textposition:"top center",
       textfont:{size:9, color:"#374151"},
       marker:{
-        size: 10 + deg*2.8,
+        size: 10 + pMtgs.length * 3.5,  // Meeting-Anzahl (nicht Degree)
         color: effectiveAbtFarben[abt] || "#9ca3af",
         symbol: isFk ? "star" : "circle",
         line:{width: isFk ? 2 : 1, color:"white"},

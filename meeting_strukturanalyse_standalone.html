@@ -598,7 +598,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "05.06.2026 10:08";
+const APP_VERSION = "05.06.2026 10:15";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -722,6 +722,7 @@ let deptFunktionen = {};  // { "Vertrieb": "operativ", "Management": "strategisc
 
 // Netzwerk: FK-Set (klickbar im Chart togglebar) + Positions-Cache
 let fkSet    = new Set(FK_LIST);   // wird bei neuem Daten-Load auf FK_LIST zurückgesetzt
+let _confirmedPersons = new Set(); // Personen die der Nutzer explizit bestätigt hat (kein gelber Punkt)
 let netCache = null;               // { pos, edges, connectedPersons, isolatedCount }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1227,8 +1228,9 @@ function resetToImport() {
   });
   document.getElementById("table-body").innerHTML = "";
   renderedTabs.clear();
-  fkSet          = new Set(FK_LIST);
-  netCache       = null;
+  fkSet             = new Set(FK_LIST);
+  _confirmedPersons = new Set();
+  netCache          = null;
   personConfidence = {};
   sankeyRendered = false;
   abtRendered    = false;
@@ -2619,6 +2621,10 @@ function closePopover() {
 // ── Zuordnung ändern ─────────────────────────────────────────────────────────
 function assignPerson(person, newDept) {
   effectivePersonAbt[person] = newDept;
+  _confirmedPersons.add(person); // explizit bestätigt → kein gelber Punkt mehr
+  // Konfidenz sofort auf 100% setzen (ohne refreshAllCharts abzuwarten)
+  if (personConfidence[person]) personConfidence[person].score = 1.0;
+  else personConfidence[person] = { score: 1.0, autoDept: newDept };
   saveConfig();
 
   // Chip in der alten Spalte entfernen
@@ -3819,7 +3825,7 @@ function saveConfig() {
   Object.entries(effectivePersonAbt).forEach(([p, d]) => {
     const autoVal = personConfidence[p]?.autoDept;
     const htmlVal = PERSON_ABT[p];
-    if (d !== autoVal || htmlVal) personAbt[p] = d; // abweichend oder explizit gesetzt
+    if (d !== autoVal || htmlVal || _confirmedPersons.has(p)) personAbt[p] = d; // abweichend, HTML-Override oder explizit bestätigt
   });
   const fkArr = [...fkSet].sort();
   // Wirkung kommt aus Confluence-Quelle, kein Tool-Override
@@ -3855,7 +3861,13 @@ function applyStoredConfig() {
     const knownPersons = new Set(Object.keys(effectivePersonAbt));
     if (cfg.personAbt) {
       Object.entries(cfg.personAbt).forEach(([p, d]) => {
-        if (knownPersons.has(p)) effectivePersonAbt[p] = d;
+        if (knownPersons.has(p)) {
+          effectivePersonAbt[p] = d;
+          _confirmedPersons.add(p); // aus localStorage = explizit bestätigt
+          // Konfidenz auf 100% → kein gelber Punkt nach Reload
+          if (personConfidence[p]) personConfidence[p].score = 1.0;
+          else personConfidence[p] = { score: 1.0, autoDept: d };
+        }
       });
     }
     if (cfg.fkList) {

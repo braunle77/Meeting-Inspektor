@@ -404,7 +404,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
   <div id="panel-0" class="panel" data-tab="1">
     <button class="tab-info-btn" onclick="showTabInfo(1)">ℹ</button>
     <div class="chart-card" id="chart-netzwerk"></div>
-    <p class="hint" id="hint-netzwerk">Knotengröße = Anzahl Meetings · Liniendicke = Verbindungsstärke (normalisiert nach Meetinggröße – große Meetings erzeugen schwächere Paarverbindungen) · Farbe = Abteilung · Klick = Verbindungen hervorheben · Doppelklick = FK-Status</p>
+    <p class="hint" id="hint-netzwerk">Knotengröße = Anzahl Meetings · Liniendicke = Beziehungsstärke (kleine Meetings zählen stärker als große Versammlungen) · Farbe = Abteilung · Klick = Verbindungen hervorheben</p>
   </div>
   <div id="panel-1" class="panel" data-tab="3">
     <button class="tab-info-btn" onclick="showTabInfo(3)">ℹ</button>
@@ -1467,8 +1467,6 @@ function renderNetzwerk() {
   _plotNetzwerk(true);
 }
 
-// Klick-Verhalten: clickTimer + activeNode für single/double click
-let clickTimer = null;
 let activeNode = null;
 
 function _plotNetzwerk(firstRender) {
@@ -1567,35 +1565,17 @@ function _plotNetzwerk(firstRender) {
   const chartEl = document.getElementById("chart-netzwerk");
   if (firstRender) {
     Plotly.newPlot(chartEl, allTraces, layout, {responsive:true, displayModeBar:false, doubleClick:false});
-    // Click listener: single click = highlight connections, double click = FK toggle
+    // Click: Verbindungen hervorheben (FK-Status nur im Personen-Tab ändern)
     chartEl.on("plotly_click", function(data) {
       if (!data.points.length) return;
       const person = data.points[0].data.name;
       if (!netCache || !netCache.connectedPersons.includes(person)) return;
-
-      if (clickTimer) {
-        clearTimeout(clickTimer);
-        clickTimer = null;
-        // Double click → FK toggle
-        if (fkSet.has(person)) fkSet.delete(person);
-        else fkSet.add(person);
-        saveConfig();
-        renderedTabs.delete(0); // Personen-Tab beim nächsten Besuch neu zeichnen
+      if (activeNode === person) {
         activeNode = null;
-        _plotNetzwerk(false);
         applyOps(opAll());
       } else {
-        const n = person;
-        clickTimer = setTimeout(function() {
-          clickTimer = null;
-          if (activeNode === n) {
-            activeNode = null;
-            applyOps(opAll());
-          } else {
-            activeNode = n;
-            applyOps(opForNode(n));
-          }
-        }, 280);
+        activeNode = person;
+        applyOps(opForNode(person));
       }
     });
   } else {

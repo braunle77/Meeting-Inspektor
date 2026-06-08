@@ -1,12 +1,11 @@
-# Quelldaten – bleiben lokal
+# Echte Quelldaten – bleiben lokal, nie committen
 *.xlsx
 *.xls
 *.csv
+# Ausnahme: testdaten.tsv ist synthetisch und absichtlich versioniert (.tsv nicht ignoriert)
 
-
-# Generierte Ausgaben (optional committen)
-# leitmet_clean.json
-# leitmet_dashboard.html
+# Lokaler Session-Kontext – nicht auf GitHub
+CLAUDE_CONTEXT.md
 
 # Python
 __pycache__/

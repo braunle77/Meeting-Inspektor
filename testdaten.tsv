@@ -1,6 +1,6 @@
 Abteilung	Meetingname	Kategorie	Zweck	Verantwortlich	Personen	Rhythmus	Dauer	Informationsfluss	Wirkung (1–4)	Status	Abteilungsübergreifend	Platzhalter	Learnings
 Business Unit	Leitungsmeeting	Leitungsmeeting	Wöchentlicher Austausch aller Führungskräfte	Maa	Maa, Bsc, Kna, Rie, Foh, Wku, Ste	wöchentlich Mo	60	Top-Down Informationen, Entscheidungen, Eskalationen	3	Aktiv	Ja
-Sales	Teammeeting Sales	Teammeeting	Monatlicher Austausch im Vertriebsteam	Bsc	Bsc, Jha, Tkr, Mvo, Swe, Pku, Afe, Cba, Lme	monatlich Di	90	Vertriebszahlen, Kundenfeedback, Pipeline-Status	2	Aktiv	Nein
+Sales	Teammeeting Sales	Teammeeting	Monatlicher Austausch im Vertriebsteam	Bsc	Bsc, Jha, Tkr, Mvo, Swe, Pku, Afe, Cba, Lme	monatlich Di	90	Vertriebszahlen, Kundenfeedback, Pipeline-Status	/3	Aktiv	Nein
 Support	Teammeeting Support	Teammeeting	Monatlicher Austausch im Support-Team	Kna	Kna, Uri, Dbe, Mho, Fwi, Sle, Rgi, Amu	monatlich Mi	60	Ticket-Status, Eskalationen, Verbesserungsideen	3	Aktiv	Nein
 Operations	Teammeeting Operations	Teammeeting	Wöchentliche Abstimmung im Operations-Team	Ste	Ste, Mla, Bha, Cwa, Nvo	wöchentlich Do	45	Operative Aufgaben, Prioritäten, Blocker	3	Aktiv	Nein
 Product Management	Teammeeting Product Management	Teammeeting	Wöchentlicher Austausch im PM-Team	Foh	Foh, Lpe	wöchentlich Di	30	Roadmap, Priorisierung, Stakeholder-Feedback	4	Aktiv	Nein
@@ -8,13 +8,13 @@ Business Excellence	Qualitätszirkel	Koordination	Monatliche Qualitätsrunde mit
 Entwicklung	Teammeeting Entwicklung	Teammeeting	Monatliches Gesamtteam-Meeting der Entwicklung	Wku	Wku, Awo, Nki, Rsc, Tba, Mfi, Jhe, Kst, Pwo, Hma, Dho, Cpr, Sre, Ipl, Gle, Bme, Jso	monatlich Do	90	Entwicklungsfortschritt, Teamankündigungen, Highlights	3	Aktiv	Nein
 Entwicklung	Standup Produkt-Team A	Standup	Zweimal wöchentlicher Sync – Di und Do	Awo	Awo, Rsc, Tba, Mfi, Jhe, Kst, Pwo, Hma	wöchentlich Di Do	15	Fortschritt, Blocker, Tagesplanung	4	Aktiv	Nein
 Entwicklung	Standup Produkt-Team B	Standup	Zweimal wöchentlicher Sync – Mo und Mi	Nki	Nki, Dho, Cpr, Sre, Ipl, Gle, Bme, Jso	wöchentlich Mo Mi	15	Fortschritt, Blocker, Tagesplanung	4	Aktiv	Nein
-Business Unit	1-on-1 BUL & Sales	1-on-1	Zweiwöchentliches Führungsgespräch BUL mit Vertriebsleiterin	Maa	Maa, Bsc	zweiwöchentlich Di	45	Ziele, Herausforderungen, Strategieabgleich	3	Aktiv	Ja
+Business Unit	1-on-1 BUL & Sales	1-on-1	Zweiwöchentliches Führungsgespräch BUL mit Vertriebsleiterin	Maa	Maa, Bsc	zweiwöchentlich Di	45	Ziele, Herausforderungen, Strategieabgleich	3/2	Aktiv	Ja
 Business Unit	1-on-1 BUL & Support	1-on-1	Zweiwöchentliches Führungsgespräch BUL mit Support-Leiter	Maa	Maa, Kna	zweiwöchentlich Mi	45	Ziele, Eskalationen, Teamgesundheit	3	Aktiv	Ja
 Business Unit	1-on-1 BUL & Business Excellence	1-on-1	Zweiwöchentliches Führungsgespräch BUL mit BE-Managerin	Maa	Maa, Rie	zweiwöchentlich Do	45	Qualitätsinitiativen, Projektstatus	3	Aktiv	Ja
-Business Unit	1-on-1 BUL & Product Management	1-on-1	Zweiwöchentliches Führungsgespräch BUL mit PM-Leiter	Maa	Maa, Foh	zweiwöchentlich Di	45	Roadmap-Alignment, Priorisierung	4	Aktiv	Ja
+Business Unit	1-on-1 BUL & Product Management	1-on-1	Zweiwöchentliches Führungsgespräch BUL mit PM-Leiter	Maa	Maa, Foh	zweiwöchentlich Di	45	Roadmap-Alignment, Priorisierung	1/4	Aktiv	Ja
 Business Unit	1-on-1 BUL & Entwicklung	1-on-1	Zweiwöchentliches Führungsgespräch BUL mit Entwicklungsleiter	Maa	Maa, Wku	zweiwöchentlich Mi	45	Entwicklungsfortschritt, Ressourcen, Risiken	3	Aktiv	Ja
 Business Unit	1-on-1 BUL & Operations	1-on-1	Zweiwöchentliches Führungsgespräch BUL mit Operations-Leiter	Maa	Maa, Ste	zweiwöchentlich Do	45	Operative Themen, Effizienz	3	Aktiv	Ja
-Operations	Ops-Koordination mit BUL	Koordination	Wöchentliche operative Abstimmung BUL mit Operations-Team	Maa	Maa, Ste, Mla, Bha, Cwa, Nvo	wöchentlich Mo	30	Operative Entscheidungen, Kapazitäten, laufende Projekte	2	Aktiv	Ja
+Operations	Ops-Koordination mit BUL	Koordination	Wöchentliche operative Abstimmung BUL mit Operations-Team	Maa	Maa, Ste, Mla, Bha, Cwa, Nvo	wöchentlich Mo	30	Operative Entscheidungen, Kapazitäten, laufende Projekte	2/3/4	Aktiv	Ja
 Geschäftsleitung	GL Statusmeeting	Statusmeeting	Quartalsweise Gesamtschau mit der Geschäftsleitung	Ath	Ath, Emu, Maa, Bsc, Kna, Rie, Foh, Wku, Ste	quartalsweise	120	Strategische Kennzahlen, Quartalsziele, Investitionsentscheidungen	3	Aktiv	Ja
 Entwicklung	Projekt-Sync Externe	Synchronisation	Wöchentlicher Sync mit externen Partnern	Foh	Foh, Wku, Awo, Pfe, Sba	wöchentlich Fr	60	Projektfortschritt, Liefergegenstände, technische Abstimmung	2	Aktiv	Ja
 Operations	Ops-Extern Koordination	Koordination	Zweiwöchentliche Abstimmung mit externen Partnern	Ste	Ste, Pfe, Sba	zweiwöchentlich Mi	60	Logistik, Lieferkette, SLA-Tracking	2	Aktiv	Ja

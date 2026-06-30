@@ -667,7 +667,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "30.06.2026 14:00";
+const APP_VERSION = "30.06.2026 14:38";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -1474,6 +1474,20 @@ function _initChartResizeObserver() {
 // Tab 1: Netzwerk (d3-force + Plotly)
 // ══════════════════════════════════════════════════════════════════════════════
 
+// Bricht Knotenbezeichnungen an Leerzeichen um (<br>) so dass mehrteilige
+// Namen innerhalb des Knotenkreises bleiben. Einzelne lange Tokens werden
+// nach 8 Zeichen mit … abgeschnitten (Hover zeigt immer den vollständigen Namen).
+function _wrapNodeLabel(name) {
+  var words = name.split(' ');
+  if (words.length > 1) {
+    return words.map(function(w) {
+      return w.length > 8 ? w.slice(0, 7) + '…' : w;
+    }).join('<br>');
+  }
+  if (name.length > 8) return name.slice(0, 7) + '…';
+  return name;
+}
+
 // renderNetzwerk: berechnet d3-force-Positionen (teuer), cached sie, ruft _plotNetzwerk auf.
 // _plotNetzwerk: baut Traces aus dem Cache – wird auch bei FK-Toggle aufgerufen (kein d3 neu).
 function renderNetzwerk() {
@@ -1576,8 +1590,8 @@ function _plotNetzwerk(firstRender) {
     return {
       x:[pos[p][0]], y:[pos[p][1]],
       mode:"markers+text",
-      text:[p], textposition:"middle center",
-      textfont:{size:12, color:"white", family:"DM Mono, monospace", weight:"bold"},
+      text:[_wrapNodeLabel(p)], textposition:"middle center",
+      textfont:{size:11, color:"white", family:"DM Mono, monospace"},
       marker:{
         size: 50 + pMtgs.length * 1.5,
         color: effectiveAbtFarben[abt] || "#9ca3af",

@@ -667,7 +667,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "30.06.2026 13:56";
+const APP_VERSION = "30.06.2026 14:00";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -3185,7 +3185,7 @@ function renderTreemap() {
     : "";
   const hint = document.getElementById("hint-treemap");
   if (hint) hint.textContent =
-    `Fläche = monatliche Personen-Stunden · Äußerer Rahmen = Kategorie (dunkler) · Innen = Meeting (heller) · Klick = Drill-down${suffix}`;
+    `Fläche = monatliche Personen-Stunden · Äußerer Rahmen = Kategorie (dunkler) · Innen = Meeting (heller) · Klick = Drill-down · Hover über kleine Boxen für Details${suffix}`;
 
   // Display-Labels: Kategorie-Rahmen truncaten (schmale Balken schneiden Zeilen
   // ab – lieber „…" als abgehackte Silben), Meeting-Boxen umbrechen.

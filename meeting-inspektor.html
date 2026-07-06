@@ -667,7 +667,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "30.06.2026 14:38";
+const APP_VERSION = "06.07.2026 17:12";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -1691,7 +1691,8 @@ function renderKalender() {
   // Aggregiere nach (tag, rhythmus, abteilung) – ein Datenpunkt pro Kombination
   const agg = {};
   aktive.forEach(m => {
-    const tage = m.wochentage.length ? m.wochentage : ["—"];
+    const tage = m.wochentage.length ? m.wochentage
+      : (m.rhythmus_klasse === "täglich" ? ["Mo","Di","Mi","Do","Fr"] : ["—"]);
     const abt  = m.abteilung || "–";
     tage.forEach(tag => {
       const key = tag + "||" + m.rhythmus_klasse + "||" + abt;

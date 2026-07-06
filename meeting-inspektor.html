@@ -667,7 +667,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "06.07.2026 22:53";
+const APP_VERSION = "07.07.2026 00:12";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -1100,6 +1100,7 @@ function parseData(text) {
       wert,           // Durchschnitt aller Bewertungen (null = nicht bewertet)
       wertVerantwortlich,   // Bewertung Verantwortliche(r) (null = nicht angegeben)
       wertTeilnehmerAvg,    // Ø Teilnehmer-Bewertung (null = kein Feedback)
+      _wirkungRaw: _wertRaw, // Rohstring für positionsbasierte Slot-Auswertung
       flugebene: (() => {
         const raw = (get("flugebene") || "").toLowerCase();
         if (/fl1|fl\s*1/i.test(raw)) return "FL1";
@@ -3691,77 +3692,116 @@ function renderMeinInputSection() {
   }
 
   var nameLower = name.toLowerCase();
-  var myMeetings = MEETINGS.filter(function(m) {
+
+  // Meetings als Verantwortliche(r)
+  var verantwMeetings = MEETINGS.filter(function(m) {
     return m.verantwortlich && m.verantwortlich.toLowerCase().includes(nameLower);
   });
 
-  if (myMeetings.length === 0) {
-    resultDiv.innerHTML = '<p class="dp-section-desc" style="color:#94a3b8;margin:0">Kein Meeting mit Verantwortlichem „' + name + '“ gefunden.</p>';
+  // Meetings als Teilnehmer (nicht bereits als Verantwortliche(r) erfasst)
+  var verantwKeys = new Set(verantwMeetings.map(function(m) { return m.name + '||' + m.abteilung; }));
+  var teilnMeetings = MEETINGS.filter(function(m) {
+    var key = m.name + '||' + m.abteilung;
+    return !verantwKeys.has(key) && m.teilnehmer.some(function(t) {
+      return t.toLowerCase().includes(nameLower);
+    });
+  });
+
+  if (verantwMeetings.length === 0 && teilnMeetings.length === 0) {
+    resultDiv.innerHTML = '<p class=”dp-section-desc” style=”color:#94a3b8;margin:0”>Kein Meeting mit Name oder Kürzel „' + name + '“ gefunden.</p>';
     return;
   }
 
   var withIssues = [];
   var cleanCount = 0;
 
-  myMeetings.forEach(function(m) {
+  // Prüfungen für Verantwortliche(r)-Meetings
+  verantwMeetings.forEach(function(m) {
     var issues = [];
     if (m.hatGruppenTeilnehmer) {
-      issues.push('<span style="font-size:.74rem;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:1px 7px">Unklare Teilnehmer: ' + m.gruppenTeilnehmer.join(', ') + '</span>');
+      issues.push('<span style=”font-size:.74rem;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:1px 7px”>Unklare Teilnehmer: ' + m.gruppenTeilnehmer.join(', ') + '</span>');
     }
     if (m.dauer === null || m.dauer === undefined) {
-      issues.push('<span style="font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px">Dauer fehlt</span>');
+      issues.push('<span style=”font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px”>Dauer fehlt</span>');
     }
     if (m.wert === null || m.wert === undefined) {
-      issues.push('<span style="font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px">Wirkung fehlt</span>');
+      issues.push('<span style=”font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px”>Wirkung fehlt</span>');
     }
     if (!m.infofluss || !m.infofluss.trim()) {
-      issues.push('<span style="font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px">Infofluss fehlt</span>');
+      issues.push('<span style=”font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px”>Infofluss fehlt</span>');
     }
     var KEIN_TAG_NOETIG = ['täglich', 'variabel'];
     if (KEIN_TAG_NOETIG.indexOf(m.rhythmus_klasse) === -1 && (!m.wochentage || m.wochentage.length === 0)) {
-      issues.push('<span style="font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px">Wochentag fehlt</span>');
+      issues.push('<span style=”font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px”>Wochentag fehlt</span>');
     }
     if (m.wertVerantwortlich !== null && m.wertTeilnehmerAvg !== null && Math.abs(m.wertVerantwortlich - m.wertTeilnehmerAvg) > 2) {
-      issues.push('<span style="font-size:.74rem;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:1px 7px">Wirkung: Einschätzung weicht stark ab (±' + Math.abs(m.wertVerantwortlich - m.wertTeilnehmerAvg).toFixed(1) + ')</span>');
+      issues.push('<span style=”font-size:.74rem;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:1px 7px”>Wirkung: Einschätzung weicht stark ab (±' + Math.abs(m.wertVerantwortlich - m.wertTeilnehmerAvg).toFixed(1) + ')</span>');
     }
     if (m.wertTeilnehmerAvg !== null && m.wertVerantwortlich === null) {
-      issues.push('<span style="font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px">Deine Wirkungsbewertung fehlt</span>');
+      issues.push('<span style=”font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px”>Deine Wirkungsbewertung fehlt</span>');
     }
     if (!m.kategorie || m.kategorie.trim() === '' || m.kategorie === '–' || m.kategorie === '-') {
-      issues.push('<span style="font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px">Kategorie fehlt → Zeitverteilung unvollständig</span>');
+      issues.push('<span style=”font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px”>Kategorie fehlt → Zeitverteilung unvollständig</span>');
     }
     if (!m.zweck || m.zweck.trim() === '' || m.zweck === '-') {
-      issues.push('<span style="font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px">Zweck fehlt</span>');
+      issues.push('<span style=”font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px”>Zweck fehlt</span>');
     }
     if (issues.length > 0) {
-      withIssues.push({ m: m, issueHTML: issues.join(' ') });
+      withIssues.push({ m: m, issueHTML: issues.join(' '), rolle: 'V' });
     } else {
       cleanCount++;
     }
   });
 
+  // Prüfungen für Teilnehmer-Meetings (nur Wirkungsslot)
+  teilnMeetings.forEach(function(m) {
+    var issues = [];
+    var userPositions = m.teilnehmer.map(function(t, i) {
+      return t.toLowerCase().includes(nameLower) ? i : -1;
+    }).filter(function(i) { return i >= 0; });
+    if (userPositions.length > 0) {
+      var wirkParts = m._wirkungRaw ? m._wirkungRaw.split('/') : [];
+      var hasUnfilledSlot = userPositions.some(function(pos) {
+        var slot = wirkParts[pos + 1]; // Slot 0 = Verantwortliche(r), Teilnehmer ab Index 1
+        return !slot || !slot.trim() || isNaN(parseInt(slot.trim(), 10));
+      });
+      if (hasUnfilledSlot) {
+        issues.push('<span style=”font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px”>Wirkungsfeedback fehlt</span>');
+      }
+    }
+    if (issues.length > 0) {
+      withIssues.push({ m: m, issueHTML: issues.join(' '), rolle: 'T' });
+    } else {
+      cleanCount++;
+    }
+  });
+
+  var totalMeetings = verantwMeetings.length + teilnMeetings.length;
   var html = '';
 
   if (withIssues.length === 0) {
-    html = '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;font-size:.84rem;color:#166534">'
-      + '&#10003; Alle ' + myMeetings.length + ' Meetings von „' + name + '“ sind vollständig erfasst.'
+    html = '<div style=”background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;font-size:.84rem;color:#166534”>'
+      + '&#10003; Alle ' + totalMeetings + ' Meetings von „' + name + '“ sind vollständig erfasst.'
       + '</div>';
   } else {
-    var total = myMeetings.length;
-    html += '<p style="font-size:.82rem;color:#374151;margin-bottom:10px"><strong>' + total + ' Meeting' + (total !== 1 ? 's' : '') + '</strong> von „' + name + '“ – '
-      + '<strong style="color:#dc2626">' + withIssues.length + '</strong> mit Handlungsbedarf:</p>';
-    html += '<div style="border:1px solid #fee2e2;border-radius:8px;overflow:hidden;background:white">';
+    html += '<p style=”font-size:.82rem;color:#374151;margin-bottom:10px”><strong>' + totalMeetings + ' Meeting' + (totalMeetings !== 1 ? 's' : '') + '</strong> von „' + name + '“ – '
+      + '<strong style=”color:#dc2626”>' + withIssues.length + '</strong> mit Handlungsbedarf:</p>';
+    html += '<div style=”border:1px solid #fee2e2;border-radius:8px;overflow:hidden;background:white”>';
     html += withIssues.map(function(entry) {
       var farbe = effectiveAbtFarben[entry.m.abteilung] || '#9ca3af';
-      return '<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 12px;border-bottom:1px solid #fef2f2;flex-wrap:wrap">'
-        + '<span class="abt-badge" style="font-size:.7rem;padding:1px 6px;background:' + farbe + '22;color:' + farbe + ';border:1px solid ' + farbe + '44;flex-shrink:0">' + entry.m.abteilung + '</span>'
-        + '<span style="font-size:.82rem;font-weight:600;color:#1a2e2c;flex-shrink:0">' + entry.m.name + '</span>'
-        + '<span style="display:flex;flex-wrap:wrap;gap:4px">' + entry.issueHTML + '</span>'
+      var rolleBadge = entry.rolle === 'T'
+        ? '<span title=”Als Teilnehmer” style=”font-size:.68rem;background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd;border-radius:4px;padding:1px 5px;flex-shrink:0”>Teiln.</span>'
+        : '<span title=”Als Verantwortliche(r)” style=”font-size:.68rem;background:#e0f2fe;color:#075985;border:1px solid #7dd3fc;border-radius:4px;padding:1px 5px;flex-shrink:0”>Verantw.</span>';
+      return '<div style=”display:flex;align-items:flex-start;gap:8px;padding:8px 12px;border-bottom:1px solid #fef2f2;flex-wrap:wrap”>'
+        + rolleBadge
+        + '<span class=”abt-badge” style=”font-size:.7rem;padding:1px 6px;background:' + farbe + '22;color:' + farbe + ';border:1px solid ' + farbe + '44;flex-shrink:0”>' + entry.m.abteilung + '</span>'
+        + '<span style=”font-size:.82rem;font-weight:600;color:#1a2e2c;flex-shrink:0”>' + entry.m.name + '</span>'
+        + '<span style=”display:flex;flex-wrap:wrap;gap:4px”>' + entry.issueHTML + '</span>'
         + '</div>';
     }).join('');
     html += '</div>';
     if (cleanCount > 0) {
-      html += '<p style="font-size:.76rem;color:#9ca3af;margin-top:8px">+ ' + cleanCount + ' Meeting' + (cleanCount !== 1 ? 's' : '') + ' ohne Lücken</p>';
+      html += '<p style=”font-size:.76rem;color:#9ca3af;margin-top:8px”>+ ' + cleanCount + ' Meeting' + (cleanCount !== 1 ? 's' : '') + ' ohne Lücken</p>';
     }
   }
 

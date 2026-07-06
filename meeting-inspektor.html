@@ -438,6 +438,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
       <button class="tab-btn" data-tab="7" onclick="showTab(7)">Zeitverteilung</button>
       <button class="tab-btn" data-tab="8" onclick="showTab(8)">Wirkung</button>
       <button class="tab-btn" data-tab="10" onclick="showTab(10)">Flight Levels</button>
+      <button class="tab-btn" data-tab="11" onclick="showTab(11)">Organigramm</button>
     </div>
     <div class="tab-group-sep"></div>
     <div class="tab-group tab-group-admin">
@@ -556,6 +557,15 @@ textarea#paste-area::placeholder{color:#cbd5e1}
     <div id="fl-alert-f5" class="fl-alert"></div>
     <p class="hint">Erwartet: FL1 → täglich/wöchentlich · FL2 → zwei-/dreiwöchentlich · FL3 → monatlich/quartalsweise. Rot = Abweichung. Bubble-Größe = Stunden/Monat.</p>
     <div id="fl-schluessel-fragen" style="margin-top:24px"></div>
+  </div>
+
+  <div id="panel-org" class="panel" data-tab="11">
+    <button class="tab-info-btn" onclick="showTabInfo(11)">ℹ</button>
+    <p class="hint" style="margin-bottom:16px">Wer übernimmt Verantwortung in welchen Bereichen? Größe der Segmente = Anzahl Meetings als Verantwortliche(r). Abteilungstypen werden aus der Konfiguration übernommen.</p>
+    <div class="chart-card" id="chart-org-sunburst" style="height:520px"></div>
+    <p class="fl-section-title" style="margin-top:20px">Verantwortungs-Ranking</p>
+    <p class="hint">Sortiert nach Anzahl Meetings als Verantwortliche(r). Reichweite = einmalig erreichbare Personen über alle eigenen Meetings.</p>
+    <div class="chart-card" id="chart-org-bar"></div>
   </div>
 
   <div id="panel-7" class="panel active" data-tab="0">
@@ -1428,6 +1438,7 @@ function showTab(idx) {
     if (idx === 7) renderTreemap();
     if (idx === 8) renderWirkungsMatrix();
     if (idx === 10) renderFlightLevels();
+    if (idx === 11) renderOrganigramm();
   }
   const pa = document.getElementById("personen-actions");
   if (pa) pa.style.display = idx === 0 ? "flex" : "none";
@@ -4805,6 +4816,150 @@ function _renderFLSchluesselFragen(aktive, byFL) {
     + makeCard(6, 'Was koennen wir aus diesen Daten nicht schlussfolgern?', q6Answer, '', q6St);
 }
 
+// ── Organigramm ───────────────────────────────────────────────────────────────
+function renderOrganigramm() {
+  var elSun = document.getElementById("chart-org-sunburst");
+  var elBar = document.getElementById("chart-org-bar");
+  if (!elSun || !elBar) return;
+
+  var aktive = MEETINGS.filter(function(m) { return m.status === "Aktiv"; });
+
+  // Meetings als Verantwortliche(r) zählen
+  var verantwCount = {};
+  aktive.forEach(function(m) {
+    if (m.verantwortlich && m.verantwortlich !== '–') {
+      verantwCount[m.verantwortlich] = (verantwCount[m.verantwortlich] || 0) + 1;
+    }
+  });
+
+  // Reichweite (einmalig erreichbare Personen) je Verantwortliche(r)
+  var verantwReach = {};
+  aktive.forEach(function(m) {
+    if (m.verantwortlich && m.verantwortlich !== '–') {
+      if (!verantwReach[m.verantwortlich]) verantwReach[m.verantwortlich] = new Set();
+      m.teilnehmer.forEach(function(t) {
+        if (t && !isGruppenParticipant(t)) verantwReach[m.verantwortlich].add(t);
+      });
+    }
+  });
+
+  // Bekannte Personen mit gültiger Abteilungszuordnung
+  var allPersons = Object.keys(effectivePersonAbt).filter(function(p) {
+    return p && p !== '–' && effectivePersonAbt[p] && effectivePersonAbt[p] !== '–'
+      && !isGruppenParticipant(p);
+  });
+
+  var TYP_LABEL = {
+    "strategisch": "Strategisch", "koordination": "Koordination",
+    "operativ": "Operativ", "unterstützend": "Unterstützend",
+    "extern": "Extern", "": "Ohne Typ"
+  };
+  var TYP_FARBEN = {
+    "strategisch": "#7c3aed", "koordination": "#2563eb",
+    "operativ": "#059669", "unterstützend": "#d97706",
+    "extern": "#9ca3af", "": "#d1d5db"
+  };
+
+  // Abteilungen nach Typ gruppieren
+  var abtByTyp = {};
+  allPersons.forEach(function(p) {
+    var abt = effectivePersonAbt[p];
+    var typ = deptFunktionen[abt] || "";
+    if (!abtByTyp[typ]) abtByTyp[typ] = [];
+    if (abtByTyp[typ].indexOf(abt) === -1) abtByTyp[typ].push(abt);
+  });
+
+  var ids = [], labels = [], parents = [], values = [], cols = [], hvr = [];
+
+  // Root
+  ids.push("root"); labels.push("Org"); parents.push(""); values.push(0);
+  cols.push("#e2e8f0"); hvr.push(allPersons.length + " Personen");
+
+  // Typ-Knoten
+  Object.keys(abtByTyp).forEach(function(typ) {
+    ids.push("typ__" + typ);
+    labels.push(TYP_LABEL[typ] || typ);
+    parents.push("root");
+    values.push(0);
+    cols.push(TYP_FARBEN[typ] || "#d1d5db");
+    hvr.push(abtByTyp[typ].length + " Abt.");
+  });
+
+  // Abteilungs-Knoten
+  Object.keys(abtByTyp).forEach(function(typ) {
+    abtByTyp[typ].forEach(function(abt) {
+      var persInAbt = allPersons.filter(function(p) { return effectivePersonAbt[p] === abt; }).length;
+      ids.push("abt__" + abt);
+      labels.push(abt);
+      parents.push("typ__" + typ);
+      values.push(0);
+      cols.push(effectiveAbtFarben[abt] || "#9ca3af");
+      hvr.push(persInAbt + " Personen");
+    });
+  });
+
+  // Personen-Knoten
+  allPersons.forEach(function(p) {
+    var abt = effectivePersonAbt[p];
+    var vCnt = verantwCount[p] || 0;
+    var reach = verantwReach[p] ? verantwReach[p].size : 0;
+    ids.push("p__" + p);
+    labels.push(p);
+    parents.push("abt__" + abt);
+    values.push(Math.max(1, vCnt));
+    cols.push(effectiveAbtFarben[abt] || "#9ca3af");
+    hvr.push(vCnt + " Meetings verantw.<br>" + reach + " Personen erreicht");
+  });
+
+  Plotly.newPlot(elSun, [{
+    type: "sunburst",
+    ids: ids,
+    labels: labels,
+    parents: parents,
+    values: values,
+    branchvalues: "total",
+    marker: { colors: cols },
+    customdata: hvr,
+    hovertemplate: "<b>%{label}</b><br>%{customdata}<extra></extra>",
+    textinfo: "label",
+    maxdepth: 3,
+    insidetextorientation: "radial"
+  }], {
+    margin: { t: 20, r: 20, b: 20, l: 20 },
+    paper_bgcolor: "transparent",
+    height: 520
+  }, { responsive: true, displayModeBar: false });
+
+  // Ranking-Balkendiagramm
+  var ranked = Object.keys(verantwCount)
+    .sort(function(a, b) { return verantwCount[b] - verantwCount[a]; })
+    .slice(0, 20);
+
+  Plotly.newPlot(elBar, [{
+    type: "bar",
+    orientation: "h",
+    x: ranked.map(function(p) { return verantwCount[p]; }).reverse(),
+    y: ranked.map(function(p) { return p; }).reverse(),
+    marker: { color: ranked.map(function(p) {
+      return effectiveAbtFarben[effectivePersonAbt[p]] || "#9ca3af";
+    }).reverse() },
+    customdata: ranked.map(function(p) {
+      var reach = verantwReach[p] ? verantwReach[p].size : 0;
+      return (effectivePersonAbt[p] || '–') + ' · Reichweite: ' + reach;
+    }).reverse(),
+    hovertemplate: "<b>%{y}</b><br>%{x} Meetings verantwortlich<br>%{customdata}<extra></extra>",
+    text: ranked.map(function(p) { return String(verantwCount[p]); }).reverse(),
+    textposition: "outside"
+  }], {
+    margin: { t: 10, r: 60, b: 40, l: 90 },
+    paper_bgcolor: "transparent",
+    plot_bgcolor: "transparent",
+    xaxis: { title: "Meetings als Verantwortliche(r)", gridcolor: "#e5e7eb" },
+    yaxis: { automargin: true },
+    height: Math.max(240, ranked.length * 32 + 60)
+  }, { responsive: true, displayModeBar: false });
+}
+
 // ── Alle Charts neu rendern ───────────────────────────────────────────────────
 function refreshAllCharts() {
   // abteilungsuebergreifend neu berechnen
@@ -4817,6 +4972,7 @@ function refreshAllCharts() {
     if (m.flugebeneAuto) m.flugebene = suggestFlightLevel(m);
   });
   renderedTabs.delete(10); // Flight Levels neu rendern
+  renderedTabs.delete(11); // Organigramm neu rendern
   renderedTabs.delete(0);  // Konfiguration (Personen + Datenpflege) neu rendern
   // Gruppen-Teilnehmer nach Abteilungsänderung neu prüfen
   MEETINGS.forEach(m => {

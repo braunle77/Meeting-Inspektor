@@ -674,7 +674,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "07.07.2026 17:51";
+const APP_VERSION = "07.07.2026 20:15";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -1079,6 +1079,7 @@ function parseData(text) {
     var wertTeilnehmerAvg = wertTeilnList.length > 0 ? wertTeilnList.reduce(function(a,b){ return a+b; }, 0) / wertTeilnList.length : null;
     var _allWerte = (wertVerantwortlich !== null ? [wertVerantwortlich] : []).concat(wertTeilnList);
     var wert = _allWerte.length > 0 ? _allWerte.reduce(function(a,b){ return a+b; }, 0) / _allWerte.length : null;
+    var wirkungEffektiv = (wertTeilnehmerAvg !== null) ? wertTeilnehmerAvg : wert;
 
     // Platzhalter – aus Spalte lesen
     let platzh_val = get("platzh");
@@ -1105,6 +1106,7 @@ function parseData(text) {
       wochentage,
       dauer,          // Minuten pro Sitzung (null = nicht angegeben)
       wert,           // Durchschnitt aller Bewertungen (null = nicht bewertet)
+      wirkungEffektiv, // Anzeigewert: wertTeilnehmerAvg wenn vorhanden, sonst wert
       wertVerantwortlich,   // Bewertung Verantwortliche(r) (null = nicht angegeben)
       wertTeilnehmerAvg,    // Ø Teilnehmer-Bewertung (null = kein Feedback)
       _wirkungRaw: _wertRaw, // Rohstring für positionsbasierte Slot-Auswertung
@@ -2451,7 +2453,7 @@ function renderTable() {
       ? ' <span class="platzh-badge">⚠ Platzhalter</span>' : "";
     const grupBadge = (m.hatGruppenTeilnehmer && m.gruppenTeilnehmer && m.gruppenTeilnehmer.length > 0)
       ? ` <span title="Gruppen-Teilnehmer: ${m.gruppenTeilnehmer.join(', ')}" style="color:#d97706;cursor:help;font-size:.85rem">⚑</span>` : "";
-    const _wertR = m.wert !== null ? Math.round(m.wert) : null;
+    const _wertR = m.wirkungEffektiv !== null ? Math.round(m.wirkungEffektiv) : null;
     const wertDisplay = _wertR
       ? '●'.repeat(_wertR) + '○'.repeat(4 - _wertR)
       : '–';
@@ -3309,7 +3311,7 @@ function renderWirkungsMatrix() {
     return {
       type: "scatter", mode: "markers", name: abt,
       x: items.map(function(d){ return d.x; }),
-      y: items.map(function(d){ return d.m.wert + yJitter[d.i]; }),
+      y: items.map(function(d){ return d.m.wirkungEffektiv + yJitter[d.i]; }),
       text: items.map(function(d) {
         var m = d.m;
         return '<b>' + m.name + '</b><br>Abteilung: ' + m.abteilung
@@ -3317,7 +3319,7 @@ function renderWirkungsMatrix() {
           + '<br>Rhythmus: ' + m.rhythmus_klasse
           + '<br>Dauer: ' + m.dauer + ' min'
           + '<br>Zeit/Monat: ' + d.x + ' h'
-          + '<br>Wirkung: ' + '●'.repeat(Math.round(m.wert)) + '○'.repeat(4-Math.round(m.wert))
+          + '<br>Wirkung: ' + '●'.repeat(Math.round(m.wirkungEffektiv)) + '○'.repeat(4-Math.round(m.wirkungEffektiv))
           + '<br>Teilnehmer: ' + (m.teilnehmer.length || 1);
       }),
       hovertemplate: "%{text}<extra></extra>",
@@ -3376,15 +3378,15 @@ function _renderWirkungsBriefing(data, xVals, xMedian) {
   var optimieren  = [], hinterfragen = [];
   data.forEach(function(m, i) {
     var x = xVals[i];
-    if (m.wert <= 2) {
+    if (m.wirkungEffektiv <= 2) {
       if (x > xMedian) optimieren.push({ m: m, x: x });
       else             hinterfragen.push({ m: m, x: x });
     }
   });
 
   // Optimieren nach Dringlichkeit sortieren: höchste Zeit × niedrigste Wirkung
-  optimieren.sort(function(a,b){ return (b.x * (3-b.m.wert)) - (a.x * (3-a.m.wert)); });
-  hinterfragen.sort(function(a,b){ return a.m.wert - b.m.wert || b.x - a.x; });
+  optimieren.sort(function(a,b){ return (b.x * (3-b.m.wirkungEffektiv)) - (a.x * (3-a.m.wirkungEffektiv)); });
+  hinterfragen.sort(function(a,b){ return a.m.wirkungEffektiv - b.m.wirkungEffektiv || b.x - a.x; });
 
   var topOpt = optimieren.slice(0, 4);
 
@@ -3409,7 +3411,7 @@ function _renderWirkungsBriefing(data, xVals, xMedian) {
       + '<span class="tbr-name" title="' + m.name + '">' + name + '</span>'
       + '<span class="abt-badge" style="font-size:.68rem;padding:1px 5px;background:' + farbe + '22;color:' + farbe + ';border:1px solid ' + farbe + '44">' + m.abteilung + '</span>'
       + '<span class="tbr-cost" style="color:#dc2626">' + item.x.toFixed(1) + ' h/Mo</span>'
-      + '<span class="tbr-pers">' + '●'.repeat(Math.round(m.wert)) + '○'.repeat(4-Math.round(m.wert)) + '</span>'
+      + '<span class="tbr-pers">' + '●'.repeat(Math.round(m.wirkungEffektiv)) + '○'.repeat(4-Math.round(m.wirkungEffektiv)) + '</span>'
       + (fkCount > 0 ? '<span class="tbr-fk">★ ' + fkCount + ' FK' + (fkCount>1?'s':'') + '</span>' : '')
       + '</div></div>';
   }).join('');
@@ -3474,9 +3476,9 @@ function _renderAbteilungsBriefing() {
   // Durchschnittliche Wirkung pro Abteilung (nur wenn >= 2 bewertete Meetings)
   var wirkSum = {}, wirkN = {};
   aktive.forEach(function(m) {
-    if (m.wert !== null && m.wert !== undefined) {
+    if (m.wirkungEffektiv !== null && m.wirkungEffektiv !== undefined) {
       var a = m.abteilung || 'Unbekannt';
-      wirkSum[a] = (wirkSum[a] || 0) + m.wert;
+      wirkSum[a] = (wirkSum[a] || 0) + m.wirkungEffektiv;
       wirkN[a]   = (wirkN[a]   || 0) + 1;
     }
   });
@@ -4394,7 +4396,7 @@ function renderFlightLevels() {
         const ms = rated.filter(m => m.flugebene === fl);
         return {
           type: "box", name: FL_LABELS[fl],
-          y: ms.map(m => m.wert), text: ms.map(m => m.name),
+          y: ms.map(m => m.wirkungEffektiv), text: ms.map(m => m.name),
           marker: { color: FL_COLORS[fl], size: 6 },
           line: { color: FL_COLORS[fl] },
           fillcolor: FL_COLORS[fl] + "22",
@@ -4792,7 +4794,7 @@ function _renderFLSchluesselFragen(aktive, byFL) {
   var q3St = (fl2 === 0 || fl3 === 0) ? WARN : (bruecken.length > 0 ? WARN : GOOD);
   var q4St = (mismatches.length > 0) ? WARN : GOOD;
   var q5teure = mitWert.length
-    ? mitWert.filter(function(m){ return m.wert <= 2 && m.dauer * (FREQ_MONTHLY[m.rhythmus_klasse] || 0.5) >= 120; }).length
+    ? mitWert.filter(function(m){ return m.wirkungEffektiv <= 2 && m.dauer * (FREQ_MONTHLY[m.rhythmus_klasse] || 0.5) >= 120; }).length
     : 0;
   var q5St = (mitWert.length === 0) ? BAD : (q5teure > 0 ? WARN : GOOD);
   var q6Major = (fl3 === 0 || fl2 === 0);

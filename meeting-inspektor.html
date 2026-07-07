@@ -674,7 +674,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "07.07.2026 20:40";
+const APP_VERSION = "07.07.2026 20:52";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -724,6 +724,15 @@ const PALETTE = [
   "#a06090",  // mauve
   "#2d4f8f",  // navy
 ];
+
+// HTML-Escaping für Nutzerdaten (Meetingnamen, Personen, Abteilungen etc.),
+// bevor sie in innerHTML oder Plotly-Hovertexte eingesetzt werden.
+// Nur an Anzeige-Stellen verwenden – nie auf Werte anwenden, die als
+// Daten-Schlüssel dienen (z. B. Plotly-Kategorien, Lookup-Keys).
+const HTML_ESCAPE_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, ch => HTML_ESCAPE_MAP[ch]);
+}
 
 // Hilfsfunktion: Hex-Farbe aufhellen (factor 0–1, 1 = weiß)
 function lightenColor(hex, factor) {
@@ -1613,11 +1622,11 @@ function _plotNetzwerk(firstRender) {
   const edgeTraces = edges.map(e => {
     const [x0,y0] = pos[e.a], [x1,y1] = pos[e.b];
     const w = Math.min(e.weight, 10);
-    const mn = e.meetings.slice(0,5).join("<br>");
+    const mn = e.meetings.slice(0,5).map(escapeHtml).join("<br>");
     return {
       x:[x0,x1,null], y:[y0,y1,null], mode:"lines",
       line:{width: w*0.5+0.3, color:"rgba(156,163,175,0.45)"},
-      hovertext:`<b>${e.a} ↔ ${e.b}</b><br>${mn}`,
+      hovertext:`<b>${escapeHtml(e.a)} ↔ ${escapeHtml(e.b)}</b><br>${mn}`,
       hoverinfo:"text", showlegend:false, opacity:1.0, type:"scatter"
     };
   });
@@ -1630,7 +1639,7 @@ function _plotNetzwerk(firstRender) {
     const isFk  = fkSet.has(p);
     const pMtgs = personMeetings[p] || [];
     const fullName = effectivePersonAbt[p] ? `${p} · ${abt}${sub ? " / "+sub : ""}${isFk ? " ★" : ""}` : p;
-    const hover = `<b>${fullName}</b><br>Meetings (${pMtgs.length}): ` + pMtgs.slice(0,6).join(", ") + (pMtgs.length > 6 ? "…" : "");
+    const hover = `<b>${escapeHtml(fullName)}</b><br>Meetings (${pMtgs.length}): ` + pMtgs.slice(0,6).map(escapeHtml).join(", ") + (pMtgs.length > 6 ? "…" : "");
     return {
       x:[pos[p][0]], y:[pos[p][1]],
       mode:"markers+text",
@@ -1770,7 +1779,7 @@ function renderKalender() {
     byAbt[abt].ys.push(rhy);
     byAbt[abt].szs.push(14 + meetings.length * 16);
     byAbt[abt].txts.push(String(meetings.length));
-    byAbt[abt].hvrs.push(`<b>${tag} · ${rhy} · ${abt}</b><br>` + meetings.join("<br>"));
+    byAbt[abt].hvrs.push(`<b>${tag} · ${rhy} · ${escapeHtml(abt)}</b><br>` + meetings.map(escapeHtml).join("<br>"));
   });
 
   // Abteilungen in fester Reihenfolge (allDepts + Sonder-Kategorien)
@@ -1840,7 +1849,7 @@ function renderOverlap() {
       }
       mr.push(v);
       var gem2 = [...sets[i]].filter(function(x){ return sets[j].has(x); });
-      hr.push('<b>'+namen[i]+'</b> ↔ <b>'+namen[j]+'</b><br>Ähnlichkeit: '+(v*100).toFixed(0)+'%<br>Gemeinsam: '+(gem2.sort().join(', ') || '–'));
+      hr.push('<b>'+escapeHtml(namen[i])+'</b> ↔ <b>'+escapeHtml(namen[j])+'</b><br>Ähnlichkeit: '+(v*100).toFixed(0)+'%<br>Gemeinsam: '+escapeHtml(gem2.sort().join(', ') || '–'));
     }
     matrix.push(mr); hover.push(hr);
   }
@@ -1871,13 +1880,13 @@ function renderOverlap() {
 
   var pairHTML = function(p, idx) {
     var badge = p.score >= 0.6 ? 'background:#fee2e2;color:#c94040' : 'background:#fef3c7;color:#92400e';
-    var gemStr = p.gem.slice(0,4).join(', ') + (p.gem.length > 4 ? ' +' + (p.gem.length-4) : '');
+    var gemStr = escapeHtml(p.gem.slice(0,4).join(', ') + (p.gem.length > 4 ? ' +' + (p.gem.length-4) : ''));
     return '<div class="pair-item">'
       + '<span class="pair-rank">' + (idx+1) + '.</span>'
       + '<div class="pair-body">'
-      + '<span class="pair-names"><strong>' + p.a + '</strong>'
+      + '<span class="pair-names"><strong>' + escapeHtml(p.a) + '</strong>'
       + '<span style="color:#9ca3af;margin:0 4px">↔</span>'
-      + '<strong>' + p.b + '</strong>'
+      + '<strong>' + escapeHtml(p.b) + '</strong>'
       + '<span style="margin-left:6px;' + badge + ';padding:1px 7px;border-radius:10px;font-size:.72rem">' + Math.round(p.score*100) + '%</span></span>'
       + '<div class="pair-gem">Gemeinsam: ' + gemStr + '</div>'
       + '</div></div>';
@@ -1963,7 +1972,7 @@ function renderAbtChart() {
       const val = isFreq
         ? `${Math.round(ms.reduce((s,m) => s+(FREQ_MONTHLY[m.rhythmus_klasse]||0.5),0)*10)/10} /Monat`
         : `${ms.length} Format${ms.length !== 1 ? "e" : ""}`;
-      return `<b>${a} · ${grp.label}</b><br>${val}` + (ms.length ? "<br>" + ms.map(m=>m.name).join("<br>") : "");
+      return `<b>${escapeHtml(a)} · ${grp.label}</b><br>${val}` + (ms.length ? "<br>" + ms.map(m=>escapeHtml(m.name)).join("<br>") : "");
     });
     return {
       type: "bar", name: grp.label, orientation: "h",
@@ -2010,14 +2019,14 @@ function renderAbtRolleChart(aktive, yAbts) {
     type: "bar", name: "Gastgeber (eigene Formate)", orientation: "h",
     y: yAbts, x: yAbts.map(a => eigene[a]),
     marker: { color: HOST_COL, opacity: 0.9 },
-    hovertext: yAbts.map(a => `<b>${a}</b><br>Gastgeber: ${eigene[a]} eigene Format${eigene[a]!==1?"e":""}`),
+    hovertext: yAbts.map(a => `<b>${escapeHtml(a)}</b><br>Gastgeber: ${eigene[a]} eigene Format${eigene[a]!==1?"e":""}`),
     hoverinfo: "text"
   };
   const guestTrace = {
     type: "bar", name: "Teilnehmer (Gast in fremden Meetings)", orientation: "h",
     y: yAbts, x: yAbts.map(a => -gast[a]),
     marker: { color: GUEST_COL, opacity: 0.9 },
-    hovertext: yAbts.map(a => `<b>${a}</b><br>Teilnehmer: in ${gast[a]} fremden Meeting${gast[a]!==1?"s":""} vertreten`),
+    hovertext: yAbts.map(a => `<b>${escapeHtml(a)}</b><br>Teilnehmer: in ${gast[a]} fremden Meeting${gast[a]!==1?"s":""} vertreten`),
     hoverinfo: "text"
   };
 
@@ -2197,16 +2206,16 @@ function _renderKommunikationBriefing(flussSymm, abtList, vol) {
     + '</div>'
     + '<div class="komm-insights-grid">'
     + '<div class="komm-insight"><div class="komm-insight-label">Kommunikationszentrum</div>'
-    + '<div class="komm-insight-value">' + zentrum + '</div>'
+    + '<div class="komm-insight-value">' + escapeHtml(zentrum) + '</div>'
     + '<div class="komm-insight-sub">vernetzt mit ' + zentrumConn + ' Abteilung' + (zentrumConn===1?'':'en') + ' · ' + (vol[zentrum]||0).toFixed(1) + ' Freq.-Punkte</div></div>'
     + '<div class="komm-insight"><div class="komm-insight-label">Stärkste Kommunikationsachse</div>'
-    + '<div class="komm-insight-value">' + achseLabel + '</div>'
+    + '<div class="komm-insight-value">' + escapeHtml(achseLabel) + '</div>'
     + '<div class="komm-insight-sub">' + achseVal + ' Freq.-Punkte</div></div>'
     + '<div class="komm-insight"><div class="komm-insight-label">Verbindungsabdeckung</div>'
     + '<div class="komm-insight-value">' + coverage + '%</div>'
     + '<div class="komm-insight-sub">' + activePairs + ' von ' + maxPairs + ' möglichen Abt.-Paaren haben gemeinsame Meetings</div></div>'
     + '<div class="komm-insight"><div class="komm-insight-label">Am wenigsten vernetzt</div>'
-    + '<div class="komm-insight-value">' + least + '</div>'
+    + '<div class="komm-insight-value">' + escapeHtml(least) + '</div>'
     + '<div class="komm-insight-sub">' + leastConn + ' direkte Verbindung' + (leastConn===1?'':'en') + '</div></div>'
     + '</div></div>';
 }
@@ -2485,7 +2494,7 @@ function renderTable() {
     const platzh = m.ist_platzhalter
       ? ' <span class="platzh-badge">⚠ Platzhalter</span>' : "";
     const grupBadge = (m.hatGruppenTeilnehmer && m.gruppenTeilnehmer && m.gruppenTeilnehmer.length > 0)
-      ? ` <span title="Gruppen-Teilnehmer: ${m.gruppenTeilnehmer.join(', ')}" style="color:#d97706;cursor:help;font-size:.85rem">⚑</span>` : "";
+      ? ` <span title="Gruppen-Teilnehmer: ${escapeHtml(m.gruppenTeilnehmer.join(', '))}" style="color:#d97706;cursor:help;font-size:.85rem">⚑</span>` : "";
     const _wertR = m.wirkungEffektiv !== null ? Math.round(m.wirkungEffektiv) : null;
     const wertDisplay = _wertR
       ? '●'.repeat(_wertR) + '○'.repeat(4 - _wertR)
@@ -2495,18 +2504,18 @@ function renderTable() {
     tr.setAttribute("data-vera", vera);
     tr.setAttribute("data-teiln", teilnStr);
     tr.innerHTML = `
-      <td><span class="abt-badge" style="background:${abtCol}22;color:${abtCol};border:1px solid ${abtCol}55">${m.abteilung}</span></td>
-      <td class="meeting-name">${m.name}${platzh}${grupBadge}</td>
-      <td><span class="kat-pill">${m.kategorie}</span></td>
+      <td><span class="abt-badge" style="background:${abtCol}22;color:${abtCol};border:1px solid ${abtCol}55">${escapeHtml(m.abteilung)}</span></td>
+      <td class="meeting-name">${escapeHtml(m.name)}${platzh}${grupBadge}</td>
+      <td><span class="kat-pill">${escapeHtml(m.kategorie)}</span></td>
       <td><span class="rhy-dot" style="background:${RHY_FARBEN[m.rhythmus_klasse]||'#9ca3af'}"></span>${m.rhythmus_klasse}</td>
       <td style="text-align:right;color:${m.dauer?'inherit':'#c0ccc9'}">${m.dauer ? m.dauer+'′' : '–'}</td>
       <td style="text-align:center;letter-spacing:1px;color:${m.wert?'#59B2A5':'#c0ccc9'}">${wertDisplay}</td>
-      <td>${vera}</td>
-      <td class="teiln-cell">${teilnStr}</td>
-      <td><span class="badge ${statusCls}">${m.status}</span></td>
+      <td>${escapeHtml(vera)}</td>
+      <td class="teiln-cell">${escapeHtml(teilnStr)}</td>
+      <td><span class="badge ${statusCls}">${escapeHtml(m.status)}</span></td>
       <td style="text-align:center">${ug}</td>
-      <td class="zweck-cell">${zweck}</td>
-      <td class="learning-cell">${learning}</td>
+      <td class="zweck-cell">${escapeHtml(zweck)}</td>
+      <td class="learning-cell">${escapeHtml(learning)}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -2688,10 +2697,10 @@ function renderPersonenTab() {
 
   const diagLines = [];
   if (_filtered.length) {
-    diagLines.push('<b>Herausgefiltert (generische Beschreibungen):<\/b> ' + _filtered.map(function(p){return '„'+p+'"';}).join(", "));
+    diagLines.push('<b>Herausgefiltert (generische Beschreibungen):<\/b> ' + _filtered.map(function(p){return '„'+escapeHtml(p)+'"';}).join(", "));
   }
   if (_noDept.length) {
-    diagLines.push('<b>Keine Abteilung erkannt (unsichtbar):<\/b> ' + _noDept.map(function(p){return '„'+p+'"';}).join(", "));
+    diagLines.push('<b>Keine Abteilung erkannt (unsichtbar):<\/b> ' + _noDept.map(function(p){return '„'+escapeHtml(p)+'"';}).join(", "));
   }
 
   if (diagLines.length) {
@@ -3146,8 +3155,8 @@ function _renderTreemapBriefing(withHours) {
     return '<div class="tbr-row">'
       + '<span class="tbr-rank">' + (i+1) + '.</span>'
       + '<div class="tbr-body">'
-      + '<span class="tbr-name" title="' + m.name + '">' + name + '</span>'
-      + '<span class="abt-badge" style="font-size:.68rem;padding:1px 5px;background:' + farbe + '22;color:' + farbe + ';border:1px solid ' + farbe + '44">' + m.abteilung + '</span>'
+      + '<span class="tbr-name" title="' + escapeHtml(m.name) + '">' + escapeHtml(name) + '</span>'
+      + '<span class="abt-badge" style="font-size:.68rem;padding:1px 5px;background:' + farbe + '22;color:' + farbe + ';border:1px solid ' + farbe + '44">' + escapeHtml(m.abteilung) + '</span>'
       + '<span class="tbr-cost">' + x.mH.toFixed(1) + ' h/Mo</span>'
       + '<span class="tbr-pers">' + m.teilnehmer.length + ' Pers. · ' + pct + '%</span>'
       + (fkCount > 0 ? '<span class="tbr-fk">★ ' + fkCount + ' FK' + (fkCount > 1 ? 's' : '') + '</span>' : '')
@@ -3347,8 +3356,8 @@ function renderWirkungsMatrix() {
       y: items.map(function(d){ return d.m.wirkungEffektiv + yJitter[d.i]; }),
       text: items.map(function(d) {
         var m = d.m;
-        return '<b>' + m.name + '</b><br>Abteilung: ' + m.abteilung
-          + '<br>Kategorie: ' + m.kategorie
+        return '<b>' + escapeHtml(m.name) + '</b><br>Abteilung: ' + escapeHtml(m.abteilung)
+          + '<br>Kategorie: ' + escapeHtml(m.kategorie)
           + '<br>Rhythmus: ' + m.rhythmus_klasse
           + '<br>Dauer: ' + m.dauer + ' min'
           + '<br>Zeit/Monat: ' + d.x + ' h'
@@ -3441,8 +3450,8 @@ function _renderWirkungsBriefing(data, xVals, xMedian) {
     return '<div class="tbr-row">'
       + '<span class="tbr-rank">' + (i+1) + '.</span>'
       + '<div class="tbr-body">'
-      + '<span class="tbr-name" title="' + m.name + '">' + name + '</span>'
-      + '<span class="abt-badge" style="font-size:.68rem;padding:1px 5px;background:' + farbe + '22;color:' + farbe + ';border:1px solid ' + farbe + '44">' + m.abteilung + '</span>'
+      + '<span class="tbr-name" title="' + escapeHtml(m.name) + '">' + escapeHtml(name) + '</span>'
+      + '<span class="abt-badge" style="font-size:.68rem;padding:1px 5px;background:' + farbe + '22;color:' + farbe + ';border:1px solid ' + farbe + '44">' + escapeHtml(m.abteilung) + '</span>'
       + '<span class="tbr-cost" style="color:#dc2626">' + item.x.toFixed(1) + ' h/Mo</span>'
       + '<span class="tbr-pers">' + '●'.repeat(Math.round(m.wirkungEffektiv)) + '○'.repeat(4-Math.round(m.wirkungEffektiv)) + '</span>'
       + (fkCount > 0 ? '<span class="tbr-fk">★ ' + fkCount + ' FK' + (fkCount>1?'s':'') + '</span>' : '')
@@ -3463,7 +3472,7 @@ function _renderWirkungsBriefing(data, xVals, xMedian) {
     + (hinterfragen.length
       ? hinterfragen.slice(0,5).map(function(d){
           var n = d.m.name.length>28 ? d.m.name.slice(0,27)+'…' : d.m.name;
-          return '<div style="font-size:.78rem;color:#6b7280;padding:2px 0">' + n + '</div>';
+          return '<div style="font-size:.78rem;color:#6b7280;padding:2px 0">' + escapeHtml(n) + '</div>';
         }).join('')
         + (hinterfragen.length > 5 ? '<div style="font-size:.75rem;color:#9ca3af;padding:2px 0">+ ' + (hinterfragen.length-5) + ' weitere</div>' : '')
       : '<div style="font-size:.8rem;color:#059669;padding:4px 0">✓ Keine auffälligen Meetings</div>')
@@ -3522,7 +3531,7 @@ function _renderAbteilungsBriefing() {
 
   var wirkInsight = bestWirkAbt
     ? '<div class="komm-insight"><div class="komm-insight-label">Beste Wirkung (Ø)</div>'
-      + '<div class="komm-insight-value">' + bestWirkAbt + '</div>'
+      + '<div class="komm-insight-value">' + escapeHtml(bestWirkAbt) + '</div>'
       + '<div class="komm-insight-sub">Ø ' + bestWirkVal + ' / 4 auf Basis von ' + wirkN[bestWirkAbt] + ' bewerteten Meetings</div></div>'
     : '';
 
@@ -3538,7 +3547,7 @@ function _renderAbteilungsBriefing() {
   var topNetz = (netzAbts.length && gastN[netzAbts[0]] > 0) ? netzAbts[0] : null;
   var netzInsight = topNetz
     ? '<div class="komm-insight"><div class="komm-insight-label">Stärkster Netzwerker</div>'
-      + '<div class="komm-insight-value">' + topNetz + '</div>'
+      + '<div class="komm-insight-value">' + escapeHtml(topNetz) + '</div>'
       + '<div class="komm-insight-sub">in ' + gastN[topNetz] + ' fremden Meetings vertreten – breit eingebunden, auch ohne viele eigene Formate</div></div>'
     : '';
 
@@ -3549,10 +3558,10 @@ function _renderAbteilungsBriefing() {
     + '</div>'
     + '<div class="komm-insights-grid">'
     + '<div class="komm-insight"><div class="komm-insight-label">Meiste eigene Formate</div>'
-    + '<div class="komm-insight-value">' + topAbt + '</div>'
+    + '<div class="komm-insight-value">' + escapeHtml(topAbt) + '</div>'
     + '<div class="komm-insight-sub">' + abtCounts[topAbt] + ' selbst veranstaltete Meeting-Formate</div></div>'
     + '<div class="komm-insight"><div class="komm-insight-label">Schlankste eigene Meeting-Struktur</div>'
-    + '<div class="komm-insight-value">' + leastAbt + '</div>'
+    + '<div class="komm-insight-value">' + escapeHtml(leastAbt) + '</div>'
     + '<div class="komm-insight-sub">' + abtCounts[leastAbt] + ' eigene Formate – sagt nichts über die Einbindung in fremde Meetings aus (siehe „Stärkster Netzwerker")</div></div>'
     + netzInsight
     + '<div class="komm-insight"><div class="komm-insight-label">Abteilungsübergreifend</div>'
@@ -3671,7 +3680,7 @@ function _renderEngpassBriefing() {
     var topZ = Object.keys(zeitSum).sort(function(a,b){ return zeitSum[b]-zeitSum[a]; })[0];
     var topZH = Math.round(zeitSum[topZ] / 60 * 10) / 10;
     zeitInsight = '<div class="komm-insight"><div class="komm-insight-label">Höchste Zeitlast</div>'
-      + '<div class="komm-insight-value">' + topZ + '</div>'
+      + '<div class="komm-insight-value">' + escapeHtml(topZ) + '</div>'
       + '<div class="komm-insight-sub">' + topZH + ' Stunden/Monat in Meetings gebunden</div></div>';
   }
 
@@ -3682,7 +3691,7 @@ function _renderEngpassBriefing() {
     + '</div>'
     + '<div class="komm-insights-grid">'
     + '<div class="komm-insight"><div class="komm-insight-label">Stärkst beanspruchte Person</div>'
-    + '<div class="komm-insight-value">' + top1 + '</div>'
+    + '<div class="komm-insight-value">' + escapeHtml(top1) + '</div>'
     + '<div class="komm-insight-sub">' + top1Total + ' Meetings'
     + (top1Kopf ? ' · davon ' + top1Kopf + ' als Verantwortliche/r' : '') + '</div></div>'
     + '<div class="komm-insight"><div class="komm-insight-label">FK-Anteil Top 10</div>'
@@ -3755,7 +3764,7 @@ function renderMeinInputSection() {
   });
 
   if (verantwMeetings.length === 0 && teilnMeetings.length === 0) {
-    resultDiv.innerHTML = '<p class="dp-section-desc" style="color:#94a3b8;margin:0">Kein Meeting mit Name oder Kürzel „' + name + '" gefunden.</p>';
+    resultDiv.innerHTML = '<p class="dp-section-desc" style="color:#94a3b8;margin:0">Kein Meeting mit Name oder Kürzel „' + escapeHtml(name) + '" gefunden.</p>';
     return;
   }
 
@@ -3768,7 +3777,7 @@ function renderMeinInputSection() {
       issues.push('<span style="font-size:.74rem;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:1px 7px">Platzhalter – Details nachtragen?</span>');
     }
     if (m.hatGruppenTeilnehmer) {
-      issues.push('<span style="font-size:.74rem;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:1px 7px">Unklare Teilnehmer: ' + m.gruppenTeilnehmer.join(', ') + '</span>');
+      issues.push('<span style="font-size:.74rem;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:1px 7px">Unklare Teilnehmer: ' + escapeHtml(m.gruppenTeilnehmer.join(', ')) + '</span>');
     }
     if (m.dauer === null || m.dauer === undefined) {
       issues.push('<span style="font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px">Dauer fehlt</span>');
@@ -3828,7 +3837,7 @@ function renderMeinInputSection() {
 
   if (issueCount === 0) {
     html = '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;font-size:.84rem;color:#166534">'
-      + '&#10003; Alle ' + totalMeetings + ' Meetings von „' + name + '" sind vollständig erfasst.'
+      + '&#10003; Alle ' + totalMeetings + ' Meetings von „' + escapeHtml(name) + '" sind vollständig erfasst.'
       + '</div>';
     resultDiv.innerHTML = html;
     return;
@@ -3836,7 +3845,7 @@ function renderMeinInputSection() {
 
   html += '<p style="font-size:.82rem;color:#374151;margin-bottom:10px">'
     + '<strong>' + totalMeetings + ' Meeting' + (totalMeetings !== 1 ? 's' : '') + '</strong>'
-    + ' von „' + name + '" – <strong style="color:#dc2626">' + issueCount + '</strong> mit Handlungsbedarf</p>';
+    + ' von „' + escapeHtml(name) + '" – <strong style="color:#dc2626">' + issueCount + '</strong> mit Handlungsbedarf</p>';
 
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%">';
   html += problemEntries.map(function(entry) {
@@ -3851,9 +3860,9 @@ function renderMeinInputSection() {
     return '<div style="border:1px solid ' + borderColor + ';border-radius:8px;padding:8px 10px;background:' + bgColor + ';min-width:0;overflow:hidden">'
       + '<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;flex-wrap:wrap">'
       + rolleBadge
-      + '<span class="abt-badge" style="font-size:.7rem;padding:1px 6px;background:' + farbe + '22;color:' + farbe + ';border:1px solid ' + farbe + '44">' + entry.m.abteilung + '</span>'
+      + '<span class="abt-badge" style="font-size:.7rem;padding:1px 6px;background:' + farbe + '22;color:' + farbe + ';border:1px solid ' + farbe + '44">' + escapeHtml(entry.m.abteilung) + '</span>'
       + '</div>'
-      + '<div style="font-size:.82rem;font-weight:600;color:#1a2e2c;margin-bottom:6px;word-break:break-word">' + entry.m.name + '</div>'
+      + '<div style="font-size:.82rem;font-weight:600;color:#1a2e2c;margin-bottom:6px;word-break:break-word">' + escapeHtml(entry.m.name) + '</div>'
       + '<div style="display:flex;flex-wrap:wrap;gap:4px">' + badgesHTML + '</div>'
       + '</div>';
   }).join('');
@@ -3875,8 +3884,8 @@ function renderDeptTypenGrid() {
       `<option value="${o.val}"${o.val === curTyp ? " selected" : ""}>${o.label}${o.hint ? " ("+o.hint+")" : ""}</option>`
     ).join("");
     return `<div class="dp-dept-row">
-      <span class="abt-badge" style="background:${farbe}22;color:${farbe};border:1px solid ${farbe}55;min-width:100px;justify-content:center">${dept}</span>
-      <select class="dp-typ-sel" data-dept="${dept.split('"').join('&#34;')}" onchange="setDeptTyp(this)">${opts}</select>
+      <span class="abt-badge" style="background:${farbe}22;color:${farbe};border:1px solid ${farbe}55;min-width:100px;justify-content:center">${escapeHtml(dept)}</span>
+      <select class="dp-typ-sel" data-dept="${escapeHtml(dept)}" onchange="setDeptTyp(this)">${opts}</select>
     </div>`;
   }).join("") || '<p class="hint">Keine Abteilungen geladen.</p>';
 }
@@ -4003,10 +4012,10 @@ function renderGruppenTeilnehmerSection() {
       + '<div style="border:1px solid #fde68a;border-radius:8px;overflow:hidden;background:#fffbeb">'
       + orphaned.map(function(name) {
         return '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid #fef3c7;flex-wrap:wrap">'
-          + '<span style="font-size:.78rem;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:1px 7px;font-weight:600">&#128683; ' + name + '<\/span>'
+          + '<span style="font-size:.78rem;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:1px 7px;font-weight:600">&#128683; ' + escapeHtml(name) + '<\/span>'
           + '<span style="font-size:.68rem;background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe;border-radius:4px;padding:1px 6px">manuell markiert<\/span>'
           + '<span style="font-size:.68rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:4px;padding:1px 6px">&#9888; nicht in aktuellen Daten<\/span>'
-          + '<button onclick="toggleNonPerson(\'' + name.replace(/'/g,"\\'") + '\')" style="font-size:.68rem;background:none;border:1px solid #d1d5db;border-radius:4px;padding:1px 6px;cursor:pointer;color:#6b7280;margin-left:2px">&#128465; Markierung entfernen<\/button>'
+          + '<button onclick="' + escapeHtml("toggleNonPerson('" + name.replace(/\\/g,"\\\\").replace(/'/g,"\\'") + "')") + '" style="font-size:.68rem;background:none;border:1px solid #d1d5db;border-radius:4px;padding:1px 6px;cursor:pointer;color:#6b7280;margin-left:2px">&#128465; Markierung entfernen<\/button>'
           + '<\/div>';
       }).join('')
       + '<\/div>'
@@ -4030,12 +4039,12 @@ function renderGruppenTeilnehmerSection() {
       : '';
     const herkunftBadge = isManual
       ? '<span style="font-size:.68rem;background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe;border-radius:4px;padding:1px 6px">manuell markiert<\/span>'
-      + '<button onclick="toggleNonPerson(\'' + e.g.replace(/'/g,"\\'") + '\')" style="font-size:.68rem;background:none;border:1px solid #d1d5db;border-radius:4px;padding:1px 6px;cursor:pointer;color:#6b7280;margin-left:2px">&#8617; Rückgängig<\/button>'
+      + '<button onclick="' + escapeHtml("toggleNonPerson('" + e.g.replace(/\\/g,"\\\\").replace(/'/g,"\\'") + "')") + '" style="font-size:.68rem;background:none;border:1px solid #d1d5db;border-radius:4px;padding:1px 6px;cursor:pointer;color:#6b7280;margin-left:2px">&#8617; Rückgängig<\/button>'
       : '<span style="font-size:.68rem;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;border-radius:4px;padding:1px 6px">&#9881; automatisch erkannt<\/span>';
     return '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid #f1f5f9;flex-wrap:wrap">'
-      + '<span class="abt-badge" style="font-size:.7rem;padding:1px 6px;background:' + farbe + '22;color:' + farbe + ';border:1px solid ' + farbe + '44">' + m.abteilung + '<\/span>'
-      + '<span style="font-size:.82rem;font-weight:600;color:#1a2e2c">' + m.name + '<\/span>'
-      + '<span style="font-size:.78rem;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:1px 7px;font-weight:600">' + e.g + '<\/span>'
+      + '<span class="abt-badge" style="font-size:.7rem;padding:1px 6px;background:' + farbe + '22;color:' + farbe + ';border:1px solid ' + farbe + '44">' + escapeHtml(m.abteilung) + '<\/span>'
+      + '<span style="font-size:.82rem;font-weight:600;color:#1a2e2c">' + escapeHtml(m.name) + '<\/span>'
+      + '<span style="font-size:.78rem;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:1px 7px;font-weight:600">' + escapeHtml(e.g) + '<\/span>'
       + rollenBadge
       + herkunftBadge
       + '<\/div>';
@@ -4312,11 +4321,10 @@ function renderFlightLevels() {
     var _pyEl = document.getElementById("chart-fl-pyramide");
     var _listEl = document.getElementById("fl-pyramide-liste");
     if (_listEl) { _listEl.innerHTML = ""; _listEl.dataset.open = ""; }
-    function _escFL(s){ return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
     function _showFLList(fl) {
       var ms = (byFL[fl] || []).slice().sort(function(x,y){ return String(x.name).localeCompare(String(y.name)); });
       var items = ms.length
-        ? ms.map(function(m){ return '<div class="fl-mtg-item"><span>' + _escFL(m.name) + '</span><span class="abt">' + _escFL(m.abteilung) + '</span></div>'; }).join("")
+        ? ms.map(function(m){ return '<div class="fl-mtg-item"><span>' + escapeHtml(m.name) + '</span><span class="abt">' + escapeHtml(m.abteilung) + '</span></div>'; }).join("")
         : '<div class="fl-mtg-item" style="color:#9ca3af">Keine Meetings auf dieser Ebene.</div>';
       _listEl.innerHTML = '<div class="fl-mtg-list">'
         + '<div class="fl-mtg-list-head"><span style="border-left:4px solid ' + FL_COLORS[fl] + ';padding-left:8px">' + ms.length + ' Meeting' + (ms.length===1?"":"s") + ' · ' + FL_LABELS[fl] + '</span>'
@@ -4447,7 +4455,7 @@ function renderFlightLevels() {
       if (a) {
         const low = rated.filter(m => (m.flugebene === "FL2" || m.flugebene === "FL3") && m.wert <= 2);
         if (low.length > 0) {
-          const names = low.slice(0, 3).map(m => `„${m.name}" (${m.flugebene}, Wirkg. ${m.wert})`).join(", ");
+          const names = low.slice(0, 3).map(m => `„${escapeHtml(m.name)}" (${m.flugebene}, Wirkg. ${m.wert})`).join(", ");
           const more  = low.length > 3 ? ` +${low.length - 3} weitere` : "";
           a.innerHTML = `<b>⚠ ${low.length} Koordinations-/Strategie-Meeting(s) mit Wirkung ≤ 2:</b> ${names}${more}. Koordinationstheater?`;
           a.className = "fl-alert fl-alert-warn";
@@ -4507,7 +4515,7 @@ function renderFlightLevels() {
         .filter(([, h]) => h.FL1 > 0 && h.FL2 > 0 && h.FL3 > 0)
         .sort((x, y) => (y[1].FL1+y[1].FL2+y[1].FL3) - (x[1].FL1+x[1].FL2+x[1].FL3));
       if (allThree.length > 0) {
-        const names = allThree.slice(0, 3).map(([p, h]) => `${p} (${(h.FL1+h.FL2+h.FL3).toFixed(0)} h/Mo)`).join(", ");
+        const names = allThree.slice(0, 3).map(([p, h]) => `${escapeHtml(p)} (${(h.FL1+h.FL2+h.FL3).toFixed(0)} h/Mo)`).join(", ");
         const more  = allThree.length > 3 ? ` +${allThree.length - 3} weitere` : "";
         a.innerHTML = `<b>⚠ ${allThree.length} Person(en) auf allen 3 Ebenen:</b> ${names}${more}. Informationsrouter oder echter Entscheider?`;
         a.className = "fl-alert fl-alert-warn";
@@ -4544,7 +4552,7 @@ function renderFlightLevels() {
         const bad  = MISMATCH[b.fl] && MISMATCH[b.fl].includes(b.r);
         const good = EXPECTED[b.fl] && EXPECTED[b.fl].includes(b.r);
         const col  = bad ? "#ef4444" : (good ? FL_COLORS[b.fl] : "#d4a843");
-        const names = b.meetings.slice(0,3).join(", ") + (b.meetings.length > 3 ? ` +${b.meetings.length-3}` : "");
+        const names = escapeHtml(b.meetings.slice(0,3).join(", ")) + (b.meetings.length > 3 ? ` +${b.meetings.length-3}` : "");
         return {
           type: "scatter", mode: "markers",
           x: [b.r], y: [b.fl],
@@ -4569,7 +4577,7 @@ function renderFlightLevels() {
       if (bad.length > 0) {
         const EXPECTED_TEXT = { FL1: "täglich/wöchentlich", FL2: "zwei-/dreiwöchentlich", FL3: "monatlich/quartalsweise" };
         var rows = bad.map(function(b) {
-          var mNames = b.meetings.slice(0,2).join(', ') + (b.meetings.length > 2 ? ' +' + (b.meetings.length-2) : '');
+          var mNames = escapeHtml(b.meetings.slice(0,2).join(', ')) + (b.meetings.length > 2 ? ' +' + (b.meetings.length-2) : '');
           var why = b.fl + ' erwartet ' + (EXPECTED_TEXT[b.fl]||'') + ', hat aber ' + b.r;
           return '<div style="padding:3px 0;border-top:1px solid #fcd34d33">'
             + '<span style="font-weight:600">' + mNames + '</span>'
@@ -4773,7 +4781,7 @@ function _renderFLSchluesselFragen(aktive, byFL) {
     q3Answer = 'Keine Person ist auf allen drei Ebenen praesentiert. Informationsfluss zwischen den Ebenen ist potenziell fragmentiert – es gibt keine formellen Brueckenkopf-Personen in den Daten.';
   } else {
     var topB = bruecken.sort(function(a, b){ return (b[1].FL1+b[1].FL2+b[1].FL3) - (a[1].FL1+a[1].FL2+a[1].FL3); });
-    var names = topB.slice(0, 3).map(function(e){ return e[0]; }).join(', ');
+    var names = escapeHtml(topB.slice(0, 3).map(function(e){ return e[0]; }).join(', '));
     q3Answer = bruecken.length + ' Person' + (bruecken.length === 1 ? '' : 'en') + ' sitzt in Meetings aller drei Ebenen: ' + names + (bruecken.length > 3 ? ' u.a.' : '') + '. Diese Personen sind zentrale Informationsrouter – sie koennen Engpass und Enabler zugleich sein.';
   }
 
@@ -4784,7 +4792,7 @@ function _renderFLSchluesselFragen(aktive, byFL) {
   if (mismatches.length === 0) {
     q4Answer = 'Alle Meetings haben einen zur Ebene passenden Rhythmus. FL1-Meetings tagen haeufig, FL3-Meetings selten – so soll es sein.';
   } else {
-    var ex = mismatches.slice(0, 2).map(function(m){ return '"' + m.name + '" (' + m.flugebene + ', ' + m.rhythmus_klasse + ')'; }).join(', ');
+    var ex = mismatches.slice(0, 2).map(function(m){ return '"' + escapeHtml(m.name) + '" (' + m.flugebene + ', ' + m.rhythmus_klasse + ')'; }).join(', ');
     q4Answer = mismatches.length + ' Meeting' + (mismatches.length === 1 ? '' : 's') + ' tagt mit einem zur Ebene unpassenden Rhythmus, z.B. ' + ex + (mismatches.length > 2 ? ' u.a.' : '') + '. Ein strategisches Meeting, das wöchentlich tagt, erzeugt operative Betriebsamkeit auf dem falschen Level.';
   }
 
@@ -4801,7 +4809,7 @@ function _renderFLSchluesselFragen(aktive, byFL) {
       q5Answer = 'Kein Meeting mit Wirkung ≤ 2 und hoher Zeitlast erkannt. Die bekannten Meetings mit geringer Wirkung haben vergleichsweise niedrigen Zeitaufwand.';
     } else {
       var top = teureKand.sort(function(a, b){ return (b.dauer*(FREQ_MONTHLY[b.rhythmus_klasse]||0.5)) - (a.dauer*(FREQ_MONTHLY[a.rhythmus_klasse]||0.5)); });
-      var names5 = top.slice(0, 3).map(function(m){ return '"' + m.name + '"'; }).join(', ');
+      var names5 = top.slice(0, 3).map(function(m){ return '"' + escapeHtml(m.name) + '"'; }).join(', ');
       q5Answer = teureKand.length + ' Meeting' + (teureKand.length === 1 ? '' : 's') + ' mit Wirkung ≤ 2 und hoher Zeitbindung: ' + names5 + (teureKand.length > 3 ? ' u.a.' : '') + '. Diese Meetings sind Kandidaten fuer Redesign oder Abschaffung.';
     }
   }

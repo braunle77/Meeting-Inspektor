@@ -667,7 +667,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "07.07.2026 00:12";
+const APP_VERSION = "07.07.2026 10:34";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -3712,12 +3712,14 @@ function renderMeinInputSection() {
     return;
   }
 
-  var withIssues = [];
-  var cleanCount = 0;
+  var allEntries = [];
 
-  // Prüfungen für Verantwortliche(r)-Meetings
-  verantwMeetings.forEach(function(m) {
+  // Hilfsfunktion: Badge-HTML für Verantwortliche(r)-Meetings
+  function _checkVerantw(m) {
     var issues = [];
+    if (m.ist_platzhalter) {
+      issues.push('<span style=”font-size:.74rem;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:1px 7px”>Platzhalter – Details nachtragen?</span>');
+    }
     if (m.hatGruppenTeilnehmer) {
       issues.push('<span style=”font-size:.74rem;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;padding:1px 7px”>Unklare Teilnehmer: ' + m.gruppenTeilnehmer.join(', ') + '</span>');
     }
@@ -3746,14 +3748,13 @@ function renderMeinInputSection() {
     if (!m.zweck || m.zweck.trim() === '' || m.zweck === '-') {
       issues.push('<span style=”font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px”>Zweck fehlt</span>');
     }
-    if (issues.length > 0) {
-      withIssues.push({ m: m, issueHTML: issues.join(' '), rolle: 'V' });
-    } else {
-      cleanCount++;
-    }
+    return issues;
+  }
+
+  verantwMeetings.forEach(function(m) {
+    allEntries.push({ m: m, issues: _checkVerantw(m), rolle: 'V' });
   });
 
-  // Prüfungen für Teilnehmer-Meetings (nur Wirkungsslot)
   teilnMeetings.forEach(function(m) {
     var issues = [];
     var userPositions = m.teilnehmer.map(function(t, i) {
@@ -3762,48 +3763,56 @@ function renderMeinInputSection() {
     if (userPositions.length > 0) {
       var wirkParts = m._wirkungRaw ? m._wirkungRaw.split('/') : [];
       var hasUnfilledSlot = userPositions.some(function(pos) {
-        var slot = wirkParts[pos + 1]; // Slot 0 = Verantwortliche(r), Teilnehmer ab Index 1
+        var slot = wirkParts[pos + 1];
         return !slot || !slot.trim() || isNaN(parseInt(slot.trim(), 10));
       });
       if (hasUnfilledSlot) {
         issues.push('<span style=”font-size:.74rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:4px;padding:1px 7px”>Wirkungsfeedback fehlt</span>');
       }
     }
-    if (issues.length > 0) {
-      withIssues.push({ m: m, issueHTML: issues.join(' '), rolle: 'T' });
-    } else {
-      cleanCount++;
-    }
+    allEntries.push({ m: m, issues: issues, rolle: 'T' });
   });
 
-  var totalMeetings = verantwMeetings.length + teilnMeetings.length;
+  // Meetings mit Problemen zuerst, dann saubere
+  allEntries.sort(function(a, b) { return b.issues.length - a.issues.length; });
+
+  var totalMeetings = allEntries.length;
+  var issueCount = allEntries.filter(function(e) { return e.issues.length > 0; }).length;
   var html = '';
 
-  if (withIssues.length === 0) {
+  if (issueCount === 0) {
     html = '<div style=”background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;font-size:.84rem;color:#166534”>'
       + '&#10003; Alle ' + totalMeetings + ' Meetings von „' + name + '“ sind vollständig erfasst.'
       + '</div>';
   } else {
-    html += '<p style=”font-size:.82rem;color:#374151;margin-bottom:10px”><strong>' + totalMeetings + ' Meeting' + (totalMeetings !== 1 ? 's' : '') + '</strong> von „' + name + '“ – '
-      + '<strong style=”color:#dc2626”>' + withIssues.length + '</strong> mit Handlungsbedarf:</p>';
-    html += '<div style=”border:1px solid #fee2e2;border-radius:8px;overflow:hidden;background:white”>';
-    html += withIssues.map(function(entry) {
-      var farbe = effectiveAbtFarben[entry.m.abteilung] || '#9ca3af';
-      var rolleBadge = entry.rolle === 'T'
-        ? '<span title=”Als Teilnehmer” style=”font-size:.68rem;background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd;border-radius:4px;padding:1px 5px;flex-shrink:0”>Teiln.</span>'
-        : '<span title=”Als Verantwortliche(r)” style=”font-size:.68rem;background:#e0f2fe;color:#075985;border:1px solid #7dd3fc;border-radius:4px;padding:1px 5px;flex-shrink:0”>Verantw.</span>';
-      return '<div style=”display:flex;align-items:flex-start;gap:8px;padding:8px 12px;border-bottom:1px solid #fef2f2;flex-wrap:wrap”>'
-        + rolleBadge
-        + '<span class=”abt-badge” style=”font-size:.7rem;padding:1px 6px;background:' + farbe + '22;color:' + farbe + ';border:1px solid ' + farbe + '44;flex-shrink:0”>' + entry.m.abteilung + '</span>'
-        + '<span style=”font-size:.82rem;font-weight:600;color:#1a2e2c;flex-shrink:0”>' + entry.m.name + '</span>'
-        + '<span style=”display:flex;flex-wrap:wrap;gap:4px”>' + entry.issueHTML + '</span>'
-        + '</div>';
-    }).join('');
-    html += '</div>';
-    if (cleanCount > 0) {
-      html += '<p style=”font-size:.76rem;color:#9ca3af;margin-top:8px”>+ ' + cleanCount + ' Meeting' + (cleanCount !== 1 ? 's' : '') + ' ohne Lücken</p>';
-    }
+    html += '<p style=”font-size:.82rem;color:#374151;margin-bottom:10px”>'
+      + '<strong>' + totalMeetings + ' Meeting' + (totalMeetings !== 1 ? 's' : '') + '</strong>'
+      + ' von „' + name + '“ – <strong style=”color:#dc2626”>' + issueCount + '</strong> mit Handlungsbedarf</p>';
   }
+
+  html += '<div style=”display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-top:' + (issueCount === 0 ? '10' : '0') + 'px”>';
+  html += allEntries.map(function(entry) {
+    var farbe = effectiveAbtFarben[entry.m.abteilung] || '#9ca3af';
+    var isClean = entry.issues.length === 0;
+    var hasError = !isClean && entry.issues.some(function(s) { return s.indexOf('#fee2e2') !== -1; });
+    var borderColor = isClean ? '#86efac' : (hasError ? '#fca5a5' : '#fcd34d');
+    var bgColor = isClean ? '#f0fdf4' : '#ffffff';
+    var rolleBadge = entry.rolle === 'T'
+      ? '<span style=”font-size:.68rem;background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd;border-radius:4px;padding:1px 5px”>Teiln.</span>'
+      : '<span style=”font-size:.68rem;background:#e0f2fe;color:#075985;border:1px solid #7dd3fc;border-radius:4px;padding:1px 5px”>Verantw.</span>';
+    var badgesHTML = isClean
+      ? '<span style=”font-size:.74rem;color:#166534”>&#10003; vollständig</span>'
+      : entry.issues.join(' ');
+    return '<div style=”border:1px solid ' + borderColor + ';border-radius:8px;padding:8px 10px;background:' + bgColor + ';min-width:0”>'
+      + '<div style=”display:flex;align-items:center;gap:5px;margin-bottom:5px;flex-wrap:wrap”>'
+      + rolleBadge
+      + '<span class=”abt-badge” style=”font-size:.7rem;padding:1px 6px;background:' + farbe + '22;color:' + farbe + ';border:1px solid ' + farbe + '44”>' + entry.m.abteilung + '</span>'
+      + '</div>'
+      + '<div style=”font-size:.82rem;font-weight:600;color:#1a2e2c;margin-bottom:6px;word-break:break-word”>' + entry.m.name + '</div>'
+      + '<div style=”display:flex;flex-wrap:wrap;gap:4px”>' + badgesHTML + '</div>'
+      + '</div>';
+  }).join('');
+  html += '</div>';
 
   resultDiv.innerHTML = html;
 }

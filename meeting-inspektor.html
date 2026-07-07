@@ -667,7 +667,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "07.07.2026 10:34";
+const APP_VERSION = "07.07.2026 10:50";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -3790,7 +3790,7 @@ function renderMeinInputSection() {
       + ' von „' + name + '“ – <strong style=”color:#dc2626”>' + issueCount + '</strong> mit Handlungsbedarf</p>';
   }
 
-  html += '<div style=”display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-top:' + (issueCount === 0 ? '10' : '0') + 'px”>';
+  html += '<div style=”display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;width:100%;box-sizing:border-box;margin-top:' + (issueCount === 0 ? '10' : '0') + 'px”>';
   html += allEntries.map(function(entry) {
     var farbe = effectiveAbtFarben[entry.m.abteilung] || '#9ca3af';
     var isClean = entry.issues.length === 0;

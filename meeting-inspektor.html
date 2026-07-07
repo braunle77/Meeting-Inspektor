@@ -674,7 +674,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "07.07.2026 20:52";
+const APP_VERSION = "07.07.2026 21:00";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -699,6 +699,21 @@ const FREQ_MONTHLY = {
   "täglich":22, "wöchentlich":4, "dreiwöchentlich":1.33,
   "zweiwöchentlich":2, "monatlich":1, "quartalsweise":0.33, "variabel":0.5
 };
+const DEFAULT_FREQ = 0.5; // Fallback für Rhythmen ohne FREQ_MONTHLY-Eintrag
+
+// Rhythmus-Klassen in kanonischer Reihenfolge (häufig → selten)
+const RHYTHMUS_ORDER = ["täglich","wöchentlich","zweiwöchentlich","dreiwöchentlich","monatlich","quartalsweise","variabel"];
+
+// Flight Levels: Rhythmen, die NICHT zur jeweiligen Ebene passen
+const FL_MISMATCH = { FL1: ["monatlich","quartalsweise"], FL2: [], FL3: ["täglich","wöchentlich"] };
+
+// ── Berechnungs-Helfer (überall statt Formel-Duplikaten verwenden) ────────────
+function freqMonthly(m) { return FREQ_MONTHLY[m.rhythmus_klasse] || DEFAULT_FREQ; }
+// Geschätzte Stunden/Monat eines Meetings; ohne Dauer-Angabe wird 1 h angenommen
+function monthlyHours(m) { return (m.dauer ? m.dauer / 60 : 1) * freqMonthly(m); }
+function activeMeetings() { return MEETINGS.filter(m => m.status === "Aktiv"); }
+function round1(n) { return Math.round(n * 10) / 10; }
+function round2(n) { return Math.round(n * 100) / 100; }
 
 // Feste Sonder-Kategorien – immer im Personen-Tab sichtbar, nicht aus Daten abgeleitet
 const SPECIAL_DEPTS = [
@@ -1545,7 +1560,7 @@ function _wrapNodeLabel(name) {
 // _plotNetzwerk: baut Traces aus dem Cache – wird auch bei FK-Toggle aufgerufen (kein d3 neu).
 function renderNetzwerk() {
   renderedTabs.add(1);
-  const aktive = MEETINGS.filter(m => m.status === "Aktiv" && !m.ist_platzhalter);
+  const aktive = activeMeetings().filter(m => !m.ist_platzhalter);
 
   // Build graph
   const nodeSet = new Set();
@@ -1736,8 +1751,8 @@ function _plotNetzwerk(firstRender) {
 // ══════════════════════════════════════════════════════════════════════════════
 function renderKalender() {
   _renderKalenderBriefing();
-  const aktive = MEETINGS.filter(m => m.status === "Aktiv");
-  const rhyO   = ["variabel","quartalsweise","monatlich","dreiwöchentlich","zweiwöchentlich","wöchentlich","täglich"];
+  const aktive = activeMeetings();
+  const rhyO   = RHYTHMUS_ORDER.slice().reverse(); // selten → häufig (Y-Achse unten → oben)
   // Numerische X-Positionen für die Wochentage (nötig für Dodge-Offsets)
   const tagIdx = { "Mo":0, "Di":1, "Mi":2, "Do":3, "Fr":4, "—":5 };
 
@@ -1829,7 +1844,7 @@ function renderKalender() {
 var _overlapCache = null;
 
 function renderOverlap() {
-  const ml = MEETINGS.filter(function(m){ return m.status === "Aktiv" && m.teilnehmer.length >= 2; });
+  const ml = activeMeetings().filter(function(m){ return m.teilnehmer.length >= 2; });
   const kurz = function(n){ return n.length > 22 ? n.slice(0,22)+'…' : n; };
   const namen = ml.map(function(m){ return m.name; });
   const sets  = ml.map(function(m){ return new Set(m.teilnehmer); });
@@ -1845,7 +1860,7 @@ function renderOverlap() {
       else {
         var inter = [...sets[i]].filter(function(x){ return sets[j].has(x); });
         var union = new Set([...sets[i], ...sets[j]]);
-        v = union.size ? Math.round(inter.length/union.size*100)/100 : 0;
+        v = union.size ? round2(inter.length / union.size) : 0;
       }
       mr.push(v);
       var gem2 = [...sets[i]].filter(function(x){ return sets[j].has(x); });
@@ -1954,7 +1969,7 @@ function setAbtMode(mode) {
 }
 
 function renderAbtChart() {
-  const aktive = MEETINGS.filter(m => m.status === "Aktiv");
+  const aktive = activeMeetings();
   const yAbts  = allDepts; // Abteilungen auf Y-Achse (horizontal)
   const isFreq = abtMode === "freq";
 
@@ -1965,12 +1980,12 @@ function renderAbtChart() {
     const xVals = yAbts.map(a => {
       const ms = aktive.filter(m => m.abteilung === a && (RHYTHM_TO_GROUP[m.rhythmus_klasse] || RHYTHM_GROUPS[3]).label === grp.label);
       if (!isFreq) return ms.length;
-      return Math.round(ms.reduce((s, m) => s + (FREQ_MONTHLY[m.rhythmus_klasse] || 0.5), 0) * 10) / 10;
+      return round1(ms.reduce((s, m) => s + freqMonthly(m), 0));
     });
     const hover = yAbts.map(a => {
       const ms = aktive.filter(m => m.abteilung === a && (RHYTHM_TO_GROUP[m.rhythmus_klasse] || RHYTHM_GROUPS[3]).label === grp.label);
       const val = isFreq
-        ? `${Math.round(ms.reduce((s,m) => s+(FREQ_MONTHLY[m.rhythmus_klasse]||0.5),0)*10)/10} /Monat`
+        ? `${round1(ms.reduce((s,m) => s + freqMonthly(m), 0))} /Monat`
         : `${ms.length} Format${ms.length !== 1 ? "e" : ""}`;
       return `<b>${escapeHtml(a)} · ${grp.label}</b><br>${val}` + (ms.length ? "<br>" + ms.map(m=>escapeHtml(m.name)).join("<br>") : "");
     });
@@ -2116,7 +2131,7 @@ function renderStatusVerteilung() {
 function renderRhythmusChart() {
   if (!MEETINGS.length) return;
 
-  const rhyO = ["täglich","wöchentlich","zweiwöchentlich","dreiwöchentlich","monatlich","quartalsweise","variabel"];
+  const rhyO = RHYTHMUS_ORDER;
 
   // Alle Kategorien sammeln
   const allKat = [...new Set(MEETINGS.map(m => (m.kategorie || "Unbekannt").trim()))].sort();
@@ -2221,7 +2236,7 @@ function _renderKommunikationBriefing(flussSymm, abtList, vol) {
 }
 
 function renderSankey() {
-  const aktive = MEETINGS.filter(m => m.status === "Aktiv");
+  const aktive = activeMeetings();
   const hasExtern = aktive.some(m => m.teilnehmer.some(t => t.toLowerCase() === "extern"));
   const usedSpecialDepts = SPECIAL_DEPTS.map(sd => sd.key)
     .filter(k => Object.values(effectivePersonAbt).includes(k));
@@ -2278,7 +2293,7 @@ function renderSankey() {
       const [a,b] = key.split("||");
       if (sortedIdx[a] === undefined || sortedIdx[b] === undefined) return;
       srcs.push(sortedIdx[a]); tgts.push(sortedIdx[b]);
-      vals.push(Math.round(v*10)/10);
+      vals.push(round1(v));
       lbls.push(`${a} ↔ ${b}: ${v.toFixed(1)} Freq.-Punkte`);
       const hex = (effectiveAbtFarben[a]||"#9ca3af").replace("#","");
       const r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),bv=parseInt(hex.slice(4,6),16);
@@ -3026,7 +3041,7 @@ function renderZeitlast() {
   let missingDauer = 0;
 
   MEETINGS.forEach(m => {
-    const freq = FREQ_MONTHLY[m.rhythmus_klasse] || 0.5;
+    const freq = freqMonthly(m);
     if (m.dauer === null) { missingDauer++; return; }
     const monMin = m.dauer * freq;
 
@@ -3065,7 +3080,7 @@ function renderZeitlast() {
   const displayZ = engpassExpanded ? persons : persons.slice(0, ENGPASS_TOP);
 
   // Minuten → Stunden, auf 1 Stelle runden
-  const toH = min => Math.round(min / 60 * 10) / 10;
+  const toH = min => round1(min / 60);
   const HEIGHT = Math.max(280, displayZ.length * 26 + 120);
 
   const suffix = missingDauer > 0
@@ -3181,14 +3196,14 @@ function _renderTreemapBriefing(withHours) {
 function renderTreemap() {
   if (!MEETINGS.length) return;
 
-  const toH = min => Math.round(min / 60 * 10) / 10;
+  const toH = min => round1(min / 60);
 
   // Monatliche Personen-Stunden pro Meeting: Dauer × Häufigkeit/Monat × Teilnehmerzahl / 60
   let missingDauer = 0;
   const withHours = [];
   MEETINGS.forEach(m => {
     if (m.dauer === null) { missingDauer++; return; }
-    const freq   = FREQ_MONTHLY[m.rhythmus_klasse] || 0.5;
+    const freq   = freqMonthly(m);
     const nPers  = m.teilnehmer.length || 1;
     const mH     = toH(m.dauer * freq * nPers);
     withHours.push({ m, mH });
@@ -3225,7 +3240,7 @@ function renderTreemap() {
   // ── Kategorie-Knoten (volle Farbe = dunkler Rahmen) ──────────────────────
   katSet.forEach(kat => {
     const items = withHours.filter(({m}) => (m.kategorie || "Sonstige") === kat);
-    const total = Math.round(items.reduce((s, {mH}) => s + mH, 0) * 10) / 10;
+    const total = round1(items.reduce((s, {mH}) => s + mH, 0));
     ids.push("cat::" + kat);
     labels.push(kat);
     parents.push("");
@@ -3312,7 +3327,7 @@ function renderWirkungsMatrix() {
   }
 
   // X = Stunden/Monat
-  const xVals = data.map(function(m){ return Math.round(m.dauer * (FREQ_MONTHLY[m.rhythmus_klasse] || 0.5) / 60 * 100) / 100; });
+  const xVals = data.map(function(m){ return round2(m.dauer * freqMonthly(m) / 60); });
 
   // Median für X-Trennlinie
   const sortedX = xVals.slice().sort(function(a,b){ return a-b; });
@@ -3498,7 +3513,7 @@ function _renderAbteilungsBriefing() {
   if (!el) return;
   if (!MEETINGS.length) { el.innerHTML = ''; return; }
 
-  var aktive = MEETINGS.filter(function(m){ return m.status === 'Aktiv'; });
+  var aktive = activeMeetings();
   if (!aktive.length) { el.innerHTML = ''; return; }
 
   // Meeting-Anzahl pro Abteilung
@@ -3527,7 +3542,7 @@ function _renderAbteilungsBriefing() {
   var wirkAbts = Object.keys(wirkN).filter(function(a){ return wirkN[a] >= 2; });
   wirkAbts.sort(function(a,b){ return (wirkSum[b]/wirkN[b]) - (wirkSum[a]/wirkN[a]); });
   var bestWirkAbt = wirkAbts.length ? wirkAbts[0] : null;
-  var bestWirkVal = bestWirkAbt ? Math.round(wirkSum[bestWirkAbt]/wirkN[bestWirkAbt]*10)/10 : null;
+  var bestWirkVal = bestWirkAbt ? round1(wirkSum[bestWirkAbt] / wirkN[bestWirkAbt]) : null;
 
   var wirkInsight = bestWirkAbt
     ? '<div class="komm-insight"><div class="komm-insight-label">Beste Wirkung (Ø)</div>'
@@ -3576,7 +3591,7 @@ function _renderKalenderBriefing() {
   if (!el) return;
   if (!MEETINGS.length) { el.innerHTML = ''; return; }
 
-  var aktive = MEETINGS.filter(function(m){ return m.status === 'Aktiv'; });
+  var aktive = activeMeetings();
   if (!aktive.length) { el.innerHTML = ''; return; }
 
   // Meetings pro Wochentag zählen
@@ -3653,7 +3668,7 @@ function _renderEngpassBriefing() {
     if (m.verantwortlich) beteiligte[m.verantwortlich] = true;
     m.teilnehmer.forEach(function(t){ beteiligte[t] = true; });
     var monMin = null;
-    if (m.dauer !== null) { hasDauer = true; monMin = m.dauer * (FREQ_MONTHLY[m.rhythmus_klasse] || 0.5); }
+    if (m.dauer !== null) { hasDauer = true; monMin = m.dauer * freqMonthly(m); }
     Object.keys(beteiligte).forEach(function(p) {
       distinctCount[p] = (distinctCount[p] || 0) + 1;
       if (monMin !== null) zeitSum[p] = (zeitSum[p] || 0) + monMin;
@@ -3678,7 +3693,7 @@ function _renderEngpassBriefing() {
   var zeitInsight = '';
   if (hasDauer && Object.keys(zeitSum).length) {
     var topZ = Object.keys(zeitSum).sort(function(a,b){ return zeitSum[b]-zeitSum[a]; })[0];
-    var topZH = Math.round(zeitSum[topZ] / 60 * 10) / 10;
+    var topZH = round1(zeitSum[topZ] / 60);
     zeitInsight = '<div class="komm-insight"><div class="komm-insight-label">Höchste Zeitlast</div>'
       + '<div class="komm-insight-value">' + escapeHtml(topZ) + '</div>'
       + '<div class="komm-insight-sub">' + topZH + ' Stunden/Monat in Meetings gebunden</div></div>';
@@ -4184,14 +4199,13 @@ function _renderFLBriefing(aktive, byFL) {
   var pFlH = {};
   aktive.forEach(function(m) {
     if (!m.flugebene) return;
-    var h = (m.dauer ? m.dauer/60 : 1) * (FREQ_MONTHLY[m.rhythmus_klasse]||0.5);
+    var h = monthlyHours(m);
     m.teilnehmer.forEach(function(t){ if (!pFlH[t]) pFlH[t]={FL1:0,FL2:0,FL3:0}; pFlH[t][m.flugebene]+=h; });
   });
   var bruecken = Object.entries(pFlH).filter(function(e){ return e[1].FL1>0&&e[1].FL2>0&&e[1].FL3>0; }).length;
 
   // F5: Frequenz-Mismatches
-  var MISMATCH5 = { FL1:["monatlich","quartalsweise"], FL2:[], FL3:["täglich","wöchentlich"] };
-  var mismatch = aktive.filter(function(m){ return MISMATCH5[m.flugebene] && MISMATCH5[m.flugebene].includes(m.rhythmus_klasse); }).length;
+  var mismatch = aktive.filter(function(m){ return FL_MISMATCH[m.flugebene] && FL_MISMATCH[m.flugebene].includes(m.rhythmus_klasse); }).length;
 
   // Status-Farben (NUR Status, nicht FL-Identität): grün = gut, gelb = Achtung
   var OK = '#059669', WARN = '#d97706';
@@ -4278,10 +4292,7 @@ function renderFlightLevels() {
   _renderFLDatenperspektive(aktive, byFL);
 
   function hPerMonth(ms) {
-    return ms.reduce((s, m) => {
-      const freq = FREQ_MONTHLY[m.rhythmus_klasse] || 0.5;
-      return s + (m.dauer ? m.dauer / 60 : 1) * freq;
-    }, 0);
+    return ms.reduce((s, m) => s + monthlyHours(m), 0);
   }
 
   // ── KPI-Karten ─────────────────────────────────────────────────────────────
@@ -4473,7 +4484,7 @@ function renderFlightLevels() {
     const pFlH = {};
     aktive.forEach(m => {
       if (!m.flugebene) return;
-      const h = (m.dauer ? m.dauer / 60 : 1) * (FREQ_MONTHLY[m.rhythmus_klasse] || 0.5);
+      const h = monthlyHours(m);
       m.teilnehmer.forEach(t => {
         if (!pFlH[t]) pFlH[t] = { FL1: 0, FL2: 0, FL3: 0 };
         pFlH[t][m.flugebene] += h;
@@ -4529,18 +4540,15 @@ function renderFlightLevels() {
 
   // ── F5: Rhythmus-Level-Matrix ──────────────────────────────────────────────
   (function() {
-    const RHY_ORDER = ["täglich","wöchentlich","zweiwöchentlich","dreiwöchentlich","monatlich","quartalsweise","variabel"];
     const EXPECTED  = { FL1: ["täglich","wöchentlich"], FL2: ["wöchentlich","zweiwöchentlich","dreiwöchentlich"], FL3: ["monatlich","quartalsweise"] };
-    const MISMATCH  = { FL1: ["monatlich","quartalsweise"], FL2: [], FL3: ["täglich","wöchentlich"] };
 
     const buckets = {};
     aktive.forEach(m => {
       if (!m.flugebene) return;
       const key = m.flugebene + "||" + m.rhythmus_klasse;
       if (!buckets[key]) buckets[key] = { fl: m.flugebene, r: m.rhythmus_klasse, meetings: [], h: 0 };
-      const freq = FREQ_MONTHLY[m.rhythmus_klasse] || 0.5;
       buckets[key].meetings.push(m.name);
-      buckets[key].h += (m.dauer ? m.dauer / 60 : 1) * freq;
+      buckets[key].h += monthlyHours(m);
     });
 
     const vals = Object.values(buckets);
@@ -4549,7 +4557,7 @@ function renderFlightLevels() {
         '<p style="padding:20px;color:#7a9e9a;font-size:.85em">Keine Daten verfügbar.</p>';
     } else {
       const traces = vals.map(b => {
-        const bad  = MISMATCH[b.fl] && MISMATCH[b.fl].includes(b.r);
+        const bad  = FL_MISMATCH[b.fl] && FL_MISMATCH[b.fl].includes(b.r);
         const good = EXPECTED[b.fl] && EXPECTED[b.fl].includes(b.r);
         const col  = bad ? "#ef4444" : (good ? FL_COLORS[b.fl] : "#d4a843");
         const names = escapeHtml(b.meetings.slice(0,3).join(", ")) + (b.meetings.length > 3 ? ` +${b.meetings.length-3}` : "");
@@ -4565,7 +4573,7 @@ function renderFlightLevels() {
       Plotly.newPlot("chart-fl-frequenz", traces, {
         ...LAYOUT_BASE,
         height: 260, margin: { l: 110, r: 30, t: 16, b: 80 },
-        xaxis: { categoryorder: "array", categoryarray: RHY_ORDER, tickangle: -30, automargin: true, gridcolor: "#f1f5f9" },
+        xaxis: { categoryorder: "array", categoryarray: RHYTHMUS_ORDER, tickangle: -30, automargin: true, gridcolor: "#f1f5f9" },
         yaxis: { categoryorder: "array", categoryarray: ["FL1","FL2","FL3"], automargin: true, gridcolor: "#f1f5f9" },
         plot_bgcolor: "#f8fafc"
       }, { displayModeBar: false });
@@ -4573,7 +4581,7 @@ function renderFlightLevels() {
 
     const a = document.getElementById("fl-alert-f5");
     if (a) {
-      const bad = Object.values(buckets).filter(b => MISMATCH[b.fl] && MISMATCH[b.fl].includes(b.r));
+      const bad = Object.values(buckets).filter(b => FL_MISMATCH[b.fl] && FL_MISMATCH[b.fl].includes(b.r));
       if (bad.length > 0) {
         const EXPECTED_TEXT = { FL1: "täglich/wöchentlich", FL2: "zwei-/dreiwöchentlich", FL3: "monatlich/quartalsweise" };
         var rows = bad.map(function(b) {
@@ -4767,7 +4775,7 @@ function _renderFLSchluesselFragen(aktive, byFL) {
   var pFlH = {};
   aktive.forEach(function(m) {
     if (!m.flugebene) return;
-    var h = (m.dauer ? m.dauer / 60 : 1) * (FREQ_MONTHLY[m.rhythmus_klasse] || 0.5);
+    var h = monthlyHours(m);
     m.teilnehmer.forEach(function(t) {
       if (!pFlH[t]) pFlH[t] = { FL1: 0, FL2: 0, FL3: 0 };
       pFlH[t][m.flugebene] += h;
@@ -4786,8 +4794,7 @@ function _renderFLSchluesselFragen(aktive, byFL) {
   }
 
   // Q4: Passt die Meeting-Frequenz zur Ebene?
-  var MISMATCH_DEF = { FL1: ['monatlich', 'quartalsweise'], FL2: [], FL3: ['taeglich', 'wöchentlich', 'täglich'] };
-  var mismatches = aktive.filter(function(m){ return MISMATCH_DEF[m.flugebene] && MISMATCH_DEF[m.flugebene].indexOf(m.rhythmus_klasse) >= 0; });
+  var mismatches = aktive.filter(function(m){ return FL_MISMATCH[m.flugebene] && FL_MISMATCH[m.flugebene].indexOf(m.rhythmus_klasse) >= 0; });
   var q4Answer, q4Missing = '';
   if (mismatches.length === 0) {
     q4Answer = 'Alle Meetings haben einen zur Ebene passenden Rhythmus. FL1-Meetings tagen haeufig, FL3-Meetings selten – so soll es sein.';
@@ -4804,11 +4811,11 @@ function _renderFLSchluesselFragen(aktive, byFL) {
     q5Answer = '';
   } else {
     var kandidaten = mitWert.filter(function(m){ return m.wert <= 2; });
-    var teureKand  = kandidaten.filter(function(m){ return m.dauer * (FREQ_MONTHLY[m.rhythmus_klasse] || 0.5) >= 120; });
+    var teureKand  = kandidaten.filter(function(m){ return m.dauer * freqMonthly(m) >= 120; });
     if (teureKand.length === 0) {
       q5Answer = 'Kein Meeting mit Wirkung ≤ 2 und hoher Zeitlast erkannt. Die bekannten Meetings mit geringer Wirkung haben vergleichsweise niedrigen Zeitaufwand.';
     } else {
-      var top = teureKand.sort(function(a, b){ return (b.dauer*(FREQ_MONTHLY[b.rhythmus_klasse]||0.5)) - (a.dauer*(FREQ_MONTHLY[a.rhythmus_klasse]||0.5)); });
+      var top = teureKand.sort(function(a, b){ return (b.dauer * freqMonthly(b)) - (a.dauer * freqMonthly(a)); });
       var names5 = top.slice(0, 3).map(function(m){ return '"' + escapeHtml(m.name) + '"'; }).join(', ');
       q5Answer = teureKand.length + ' Meeting' + (teureKand.length === 1 ? '' : 's') + ' mit Wirkung ≤ 2 und hoher Zeitbindung: ' + names5 + (teureKand.length > 3 ? ' u.a.' : '') + '. Diese Meetings sind Kandidaten fuer Redesign oder Abschaffung.';
     }
@@ -4835,7 +4842,7 @@ function _renderFLSchluesselFragen(aktive, byFL) {
   var q3St = (fl2 === 0 || fl3 === 0) ? WARN : (bruecken.length > 0 ? WARN : GOOD);
   var q4St = (mismatches.length > 0) ? WARN : GOOD;
   var q5teure = mitWert.length
-    ? mitWert.filter(function(m){ return m.wirkungEffektiv <= 2 && m.dauer * (FREQ_MONTHLY[m.rhythmus_klasse] || 0.5) >= 120; }).length
+    ? mitWert.filter(function(m){ return m.wirkungEffektiv <= 2 && m.dauer * freqMonthly(m) >= 120; }).length
     : 0;
   var q5St = (mitWert.length === 0) ? BAD : (q5teure > 0 ? WARN : GOOD);
   var q6Major = (fl3 === 0 || fl2 === 0);
@@ -4869,7 +4876,7 @@ function renderOrganigramm() {
   var elSun = document.getElementById("chart-org-sunburst");
   if (!elSun) return;
 
-  var aktive = MEETINGS.filter(function(m) { return m.status === "Aktiv"; });
+  var aktive = activeMeetings();
 
   // Meetings als Verantwortliche(r) zählen
   var verantwCount = {};

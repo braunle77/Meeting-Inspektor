@@ -563,9 +563,6 @@ textarea#paste-area::placeholder{color:#cbd5e1}
     <button class="tab-info-btn" onclick="showTabInfo(11)">ℹ</button>
     <p class="hint" style="margin-bottom:16px">Wer übernimmt Verantwortung in welchen Bereichen? Größe der Segmente = Anzahl Meetings als Verantwortliche(r). Abteilungstypen werden aus der Konfiguration übernommen.</p>
     <div class="chart-card" id="chart-org-sunburst" style="height:520px"></div>
-    <p class="fl-section-title" style="margin-top:20px">Verantwortungs-Ranking</p>
-    <p class="hint">Sortiert nach Anzahl Meetings als Verantwortliche(r). Reichweite = einmalig erreichbare Personen über alle eigenen Meetings.</p>
-    <div class="chart-card" id="chart-org-bar"></div>
   </div>
 
   <div id="panel-7" class="panel active" data-tab="0">
@@ -677,7 +674,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "07.07.2026 13:35";
+const APP_VERSION = "07.07.2026 13:49";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -4819,8 +4816,7 @@ function _renderFLSchluesselFragen(aktive, byFL) {
 // ── Organigramm ───────────────────────────────────────────────────────────────
 function renderOrganigramm() {
   var elSun = document.getElementById("chart-org-sunburst");
-  var elBar = document.getElementById("chart-org-bar");
-  if (!elSun || !elBar) return;
+  if (!elSun) return;
 
   var aktive = MEETINGS.filter(function(m) { return m.status === "Aktiv"; });
 
@@ -4930,34 +4926,6 @@ function renderOrganigramm() {
     height: 520
   }, { responsive: true, displayModeBar: false });
 
-  // Ranking-Balkendiagramm
-  var ranked = Object.keys(verantwCount)
-    .sort(function(a, b) { return verantwCount[b] - verantwCount[a]; })
-    .slice(0, 20);
-
-  Plotly.newPlot(elBar, [{
-    type: "bar",
-    orientation: "h",
-    x: ranked.map(function(p) { return verantwCount[p]; }).reverse(),
-    y: ranked.map(function(p) { return p; }).reverse(),
-    marker: { color: ranked.map(function(p) {
-      return effectiveAbtFarben[effectivePersonAbt[p]] || "#9ca3af";
-    }).reverse() },
-    customdata: ranked.map(function(p) {
-      var reach = verantwReach[p] ? verantwReach[p].size : 0;
-      return (effectivePersonAbt[p] || '–') + ' · Reichweite: ' + reach;
-    }).reverse(),
-    hovertemplate: "<b>%{y}</b><br>%{x} Meetings verantwortlich<br>%{customdata}<extra></extra>",
-    text: ranked.map(function(p) { return String(verantwCount[p]); }).reverse(),
-    textposition: "outside"
-  }], {
-    margin: { t: 10, r: 60, b: 40, l: 90 },
-    paper_bgcolor: "transparent",
-    plot_bgcolor: "transparent",
-    xaxis: { title: "Meetings als Verantwortliche(r)", gridcolor: "#e5e7eb" },
-    yaxis: { automargin: true },
-    height: Math.max(240, ranked.length * 32 + 60)
-  }, { responsive: true, displayModeBar: false });
 }
 
 // ── Alle Charts neu rendern ───────────────────────────────────────────────────

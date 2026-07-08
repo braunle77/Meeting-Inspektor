@@ -674,7 +674,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "08.07.2026 11:30";
+const APP_VERSION = "08.07.2026 11:52";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -5172,6 +5172,25 @@ function showToast(msg) {
 // Wenn der Browser HTML im Clipboard hat (Confluence kopiert immer als HTML),
 // parsen wir die <table> direkt – kein Separator-Rätsel mehr.
 // ══════════════════════════════════════════════════════════════════════════════
+// Text einer Tabellen-Zelle mit sichtbaren Umbrüchen als "\n" extrahieren.
+// Nötig, weil das DOMParser-Dokument nie gerendert wird: innerText fällt dort
+// auf textContent zurück, und textContent verschluckt <br>- und <p>-Grenzen
+// ersatzlos ("wöchentlich<br>Montag" → "wöchentlichMontag").
+function _htmlCellText(node) {
+  let out = "";
+  for (const child of node.childNodes) {
+    if (child.nodeType === 3) {            // Text-Knoten
+      out += child.nodeValue;
+    } else if (child.nodeName === "BR") {
+      out += "\n";
+    } else if (child.nodeType === 1) {     // Element → rekursiv
+      out += _htmlCellText(child);
+      if (/^(P|DIV|LI|UL|OL|TR|H[1-6])$/.test(child.nodeName)) out += "\n";
+    }
+  }
+  return out;
+}
+
 function parseHtmlTable(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   // Confluence kann mehrere Tabellen auf der Seite haben – nimm die erste,
@@ -5190,11 +5209,14 @@ function parseHtmlTable(html) {
   for (const tr of targetTable.querySelectorAll('tr')) {
     const cells = [];
     for (const cell of tr.querySelectorAll('th, td')) {
-      // innerText respektiert CSS display:none und Zeilenumbrüche besser als textContent
-      const txt = (cell.innerText || cell.textContent || '')
-        .replace(/\r?\n/g, ' ')   // Zeilenumbrüche innerhalb einer Zelle → Leerzeichen
-        .replace(/\s+/g, ' ')     // mehrfache Leerzeichen normalisieren
+      let txt = _htmlCellText(cell)
+        .replace(/\r/g, '')
+        .replace(/[ \t]+/g, ' ')      // mehrfache Leerzeichen/Tabs normalisieren
+        .replace(/ *\n+ */g, '\n')    // Umbrüche in der Zelle erhalten, aber bündeln
         .trim();
+      // Zellen mit Umbruch/Quote quoten – splitIntoRows/splitLine in parseData
+      // setzen sie beim Import wieder korrekt zu EINER Zelle zusammen.
+      if (/[\n"]/.test(txt)) txt = '"' + txt.replace(/"/g, '""') + '"';
       cells.push(txt);
     }
     if (cells.some(c => c.length > 0)) {

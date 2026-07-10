@@ -674,7 +674,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "08.07.2026 12:37";
+const APP_VERSION = "09.07.2026 22:13";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -3861,6 +3861,15 @@ function _collectImpulseEntries(nameLower) {
   return entries;
 }
 
+// Persistenter Reflexions-Impuls: erscheint immer, sobald eigene Meetings gefunden wurden -
+// bewusst keine Ampelfarbe, da kein Status, sondern ein Denkanstoss (nicht automatisch pruefbar)
+function _reflexionsImpulsBox() {
+  return '<div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:10px 14px;font-size:.84rem;color:#3730a3;margin-bottom:10px;line-height:1.5">'
+    + '&#128173; <strong>Reflexions-Impuls:</strong> Beschreibt die hinterlegte Kategorie deiner Meetings den <strong>Ist-Zustand</strong> &ndash; oder den Wunsch? '
+    + 'Ein <em>Daily</em>, das l&auml;ngst ein Statusbericht ist, verzerrt jede Analyse. Pr&uuml;fe das regelm&auml;&szlig;ig.'
+    + '</div>';
+}
+
 // Eine Karte im Impulse-Grid (Rolle · Abteilung · Meetingname · Issue-Badges)
 function _renderImpulseCard(entry) {
   var farbe = effectiveAbtFarben[entry.m.abteilung] || COLORS.neutral;
@@ -3919,13 +3928,15 @@ function renderMeinInputSection() {
   var issueCount = problemEntries.length;
 
   if (issueCount === 0) {
-    resultDiv.innerHTML = '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;font-size:.84rem;color:#166534">'
+    resultDiv.innerHTML = _reflexionsImpulsBox()
+      + '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;font-size:.84rem;color:#166534">'
       + '&#10003; Alle ' + totalMeetings + ' Meetings von „' + escapeHtml(name) + '" sind vollständig erfasst.'
       + '</div>';
     return;
   }
 
-  var html = '<p style="font-size:.82rem;color:#374151;margin-bottom:10px">'
+  var html = _reflexionsImpulsBox()
+    + '<p style="font-size:.82rem;color:#374151;margin-bottom:10px">'
     + '<strong>' + totalMeetings + ' Meeting' + (totalMeetings !== 1 ? 's' : '') + '</strong>'
     + ' von „' + escapeHtml(name) + '" – <strong style="color:#dc2626">' + issueCount + '</strong> mit Handlungsbedarf</p>';
 

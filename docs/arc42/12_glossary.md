@@ -54,10 +54,14 @@ Die Kommunikationsebene eines Meetings nach dem Flight-Levels-Modell: FL1 operat
 _Avoid_: Flugebene (nur als Urliste-Spaltenname), Hierarchieebene
 
 **Agile Interaktion**:
-Flight-Levels-Begriff für die Verbindung zwischen den Ebenen-Systemen: Ebenen werden nicht durch Rollen oder Strukturen verbunden, sondern durch regelmäßige Interaktionen – im Meeting Inspektor sind das die Meetings selbst.
+Eine der fünf Kernaktivitäten des Flight-Levels-Modells („establish agile interactions"): regelmäßige, ergebnisorientierte Kommunikation auf und zwischen den Ebenen. Die Ebenen selbst verbindet nicht die Interaktion, sondern die Systemarchitektur (Boards, Flight Items, Flight Routes). Im Meeting Inspektor entsprechen die Meetings der Urliste den Interaktionen.
+
+**Result-neutral**:
+Originalbegriff des Flight-Levels-Modells für Meetings ohne Substanz: Es wird nichts Wesentliches gesagt, nichts entschieden, und alle sind hinterher so schlau wie vorher. Anker der Wirkungsgrad-Diagnose im Tool.
+_Avoid_: Koordinationstheater (erfundener Begriff, aus dem Tool entfernt)
 
 **Ebenenübergreifende Präsenz**:
-Eigenschaft einer Person, die auf mehreren Flight Levels in Meetings vertreten ist und damit agile Interaktionen zwischen den Ebenen trägt. Bewusst rein beschreibend benannt – das Flight-Levels-Modell kennt hierfür keinen eigenen Begriff, und wir erfinden kein Pseudo-Vokabular (strikte Orientierung an der Originalquelle von Klaus Leopold).
+Eigenschaft einer Person, die auf mehreren Flight Levels in Meetings vertreten ist. Das Modell wertet Personen als Informations-Router zwischen Ebenen als Anti-Pattern („Stop using people as routers") – Informationen sollen über Boards fließen. Bewusst rein beschreibend benannt; das Modell kennt hierfür keine Personenrolle.
 _Avoid_: Brückenkopf (kein Flight-Levels-Vokabular, wird aus dem Tool entfernt), Ebenen-Verbinder
 
 ## Organisation

@@ -675,7 +675,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "12.07.2026 11:07";
+const APP_VERSION = "12.07.2026 11:14";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -1501,8 +1501,8 @@ const TAB_INFO = {
        folgefragen: "Welche Meetings haben noch keine Wirkungsbewertung? Gibt es Meetings, die nicht mehr stattfinden, aber noch als Aktiv geführt sind?" },
   10: { title: "Flight Levels – Kommunikationsfluss-Diagnose",
         was: "Fünf Visualisierungen: Verteilung je Flight Level, FL2-Verbindungsmatrix, Wirkungsgrad nach Ebene, Informationsfluss über Personen (People as Routers) und Rhythmus-Übersicht.",
-        achten: "Leitfragen des Modells – FL1 Operativ: Arbeiten wir effektiv an den richtigen Dingen? FL2 Koordination: Wie arbeiten Teams auf gemeinsame Ziele hin? FL3 Strategisch: Wird Strategie in echte Ergebnisse übersetzt? Die FL-Zuordnung ist eine tool-eigene Heuristik über Abteilungstypen (im Konfiguration-Tab pflegbar).",
-        folgefragen: "Welche Abteilungspaare haben kein gemeinsames Koordinationsformat? Welche Meetings sind result-neutral – nichts entschieden, alle so schlau wie vorher? Fließen Informationen über Boards oder über einzelne Personen?" },
+        achten: "Leitfragen des Modells – FL1 Operativ: Arbeiten wir effektiv an den richtigen Dingen? FL2 Koordination: Wie arbeiten Teams auf gemeinsame Ziele hin? FL3 Strategisch: Wird Strategie in echte Ergebnisse übersetzt? Motor sind fünf Kernaktivitäten auf allen Ebenen: visualisieren, Fokus schaffen, agile Interaktionen etablieren, Fortschritt messen, verbessern. Die FL-Zuordnung ist eine tool-eigene Heuristik über Abteilungstypen (im Konfiguration-Tab pflegbar).",
+        folgefragen: "Die vier Schlüsselfragen des Modells für Kommunikationsformate: Wie koordinieren wir in kurzen Schleifen? Wie entscheiden wir, was zu tun ist? Wie entscheiden wir, wie etwas zu tun ist? Wie verbessern wir uns? Dazu aus dem Tool: Welche Meetings sind result-neutral, und fließen Informationen über Boards oder über einzelne Personen?" },
 };
 
 function showTabInfo(idx) {
@@ -4233,10 +4233,10 @@ function _renderFLBriefing(aktive, byFL) {
   var headStatus, headColor;
   if (missingHead.length) {
     headStatus = '⚠ ' + missingHead.join(' & ') + ' nicht erfasst – vermutlich noch nicht eingepflegt. Für ein vollständiges Bild ergänzen.';
-    headColor = '#d97706';
+    headColor = COLORS.warn;
   } else {
     headStatus = '✓ Alle drei Ebenen sind in den Daten vertreten – die Diagnosen unten haben eine vollständige Basis.';
-    headColor = '#059669';
+    headColor = COLORS.ok;
   }
 
   // F2: Koordinationsluecken
@@ -4252,13 +4252,8 @@ function _renderFLBriefing(aktive, byFL) {
   var missing = maxPairs - Object.keys(conn).length;
 
   // F4: Personen auf allen drei Ebenen (People-as-Routers-Signal)
-  var pFlH = {};
-  aktive.forEach(function(m) {
-    if (!m.flugebene) return;
-    var h = monthlyHours(m);
-    m.teilnehmer.forEach(function(t){ if (!pFlH[t]) pFlH[t]={FL1:0,FL2:0,FL3:0}; pFlH[t][m.flugebene]+=h; });
-  });
-  var routerCount = Object.entries(pFlH).filter(function(e){ return e[1].FL1>0&&e[1].FL2>0&&e[1].FL3>0; }).length;
+  var pFlH = _flPersonHoursByLevel(aktive);
+  var routerCount = Object.entries(pFlH).filter(function(e){ return _flOnAllLevels(e[1]); }).length;
 
   // F3: Result-neutral-Kandidaten (FL2/FL3 mit Wirkung <= 2)
   var bewertet = aktive.filter(function(m){ return m.wert !== null && (m.flugebene === 'FL2' || m.flugebene === 'FL3'); });
@@ -4290,7 +4285,7 @@ function _renderFLBriefing(aktive, byFL) {
   // Kachel 3: Result-neutral-Kandidaten
   var k3val, k3col, k3sub;
   if (bewertet.length === 0) {
-    k3col = '#9ca3af'; k3val = '– Keine Daten';
+    k3col = COLORS.neutral; k3val = '– Keine Daten';
     k3sub = 'Keine bewerteten FL2/FL3-Meetings – Wirkung (1–4) in der Urliste ergänzen.';
   } else if (resultNeutral > 0) {
     k3col = WARN; k3val = '⚠ ' + resultNeutral + ' Kandidat' + (resultNeutral===1?'':'en');
@@ -4302,7 +4297,7 @@ function _renderFLBriefing(aktive, byFL) {
 
   // Kachel 4: Verteilung der Ebenen (reine Beobachtung – das Modell kennt keine Soll-Verteilung)
   var vertSub = 'Anzahl je Ebene, wie in der Urliste erfasst bzw. klassifiziert. Das Modell gibt keine Soll-Verteilung vor.';
-  var vertSubColor = '#9ca3af';
+  var vertSubColor = COLORS.neutral;
 
   el.innerHTML = '<div class="komm-briefing-card">'
     + '<div class="tbr-header"><span class="tbr-title">Flight Levels – Auf einen Blick</span>'
@@ -4336,6 +4331,20 @@ const LAYOUT_BASE = {
 function hPerMonth(ms) {
   return ms.reduce((s, m) => s + monthlyHours(m), 0);
 }
+// Stunden/Monat je Person und Flight Level: { Kürzel: {FL1,FL2,FL3} }
+function _flPersonHoursByLevel(aktive) {
+  var pFlH = {};
+  aktive.forEach(function(m) {
+    if (!m.flugebene) return;
+    var h = monthlyHours(m);
+    m.teilnehmer.forEach(function(t) {
+      if (!pFlH[t]) pFlH[t] = { FL1: 0, FL2: 0, FL3: 0 };
+      pFlH[t][m.flugebene] += h;
+    });
+  });
+  return pFlH;
+}
+function _flOnAllLevels(h) { return h.FL1 > 0 && h.FL2 > 0 && h.FL3 > 0; }
 
 function renderFlightLevels() {
   const aktive = MEETINGS.filter(m => !m.ist_platzhalter);
@@ -4547,23 +4556,17 @@ function _toggleFLRouterAnon(checked) {
 }
 
 function _renderFLRouterDiagnose(aktive, byFL) {
-  const pFlH = {};
-  aktive.forEach(m => {
-    if (!m.flugebene) return;
-    const h = monthlyHours(m);
-    m.teilnehmer.forEach(t => {
-      if (!pFlH[t]) pFlH[t] = { FL1: 0, FL2: 0, FL3: 0 };
-      pFlH[t][m.flugebene] += h;
-    });
-  });
-  const router = Object.entries(pFlH)
+  const pFlH = _flPersonHoursByLevel(aktive);
+  const routerAll = Object.entries(pFlH)
     .filter(([, h]) => [h.FL1 > 0, h.FL2 > 0, h.FL3 > 0].filter(Boolean).length >= 2)
-    .sort((a, b) => b[1].FL2 - a[1].FL2)
-    .slice(0, 25);
+    .sort((a, b) => b[1].FL2 - a[1].FL2);
+  const router = routerAll.slice(0, 25);
 
-  // Anzeige-Kennung: Urliste-Kürzel oder anonymisiert (Toggle für Management-Runden)
+  // Anzeige-Kennung: Urliste-Kürzel oder anonymisiert (Toggle für Management-Runden).
+  // Nummerierung über ALLE Mehr-Ebenen-Personen, damit auch Alert-Nennungen
+  // jenseits der Top 25 eine eindeutige Kennung erhalten.
   const anonLabel = {};
-  router.forEach(([p], i) => { anonLabel[p] = "Person " + (i + 1); });
+  routerAll.forEach(([p], i) => { anonLabel[p] = "Person " + (i + 1); });
   function personLabel(p) { return flRouterAnon ? (anonLabel[p] || "Person") : p; }
 
   const chk = document.getElementById("fl-router-anon");
@@ -4597,7 +4600,7 @@ function _renderFLRouterDiagnose(aktive, byFL) {
   const a = document.getElementById("fl-alert-f4");
   if (a) {
     const allThree = Object.entries(pFlH)
-      .filter(([, h]) => h.FL1 > 0 && h.FL2 > 0 && h.FL3 > 0)
+      .filter(([, h]) => _flOnAllLevels(h))
       .sort((x, y) => (y[1].FL1+y[1].FL2+y[1].FL3) - (x[1].FL1+x[1].FL2+x[1].FL3));
     if (allThree.length > 0) {
       const names = allThree.slice(0, 3).map(([p, h]) => `${escapeHtml(personLabel(p))} (${(h.FL1+h.FL2+h.FL3).toFixed(0)} h/Mo)`).join(", ");
@@ -4826,34 +4829,34 @@ function _renderFLSchluesselFragen(aktive, byFL) {
       : 'Alle Abteilungspaare haben mindestens ein gemeinsames Koordinationsformat.';
   }
 
-  // Q3 (frueher Q5): Gibt es teure Meetings mit geringer Wirkung?
+  // Q3: Gibt es teure Meetings mit geringer Wirkung?
   var mitWert  = aktive.filter(function(m){ return m.wert !== null && m.dauer !== null; });
-  var q5Answer, q5Missing = '';
+  var q3Answer, q3Missing = '';
   if (mitWert.length === 0) {
-    q5Missing = 'Keine Wirkungsangaben vorhanden – diese Frage kann nicht beantwortet werden. Felder „Wirkung" und „Dauer" in der Urliste befüllen.';
-    q5Answer = '';
+    q3Missing = 'Keine Wirkungsangaben vorhanden – diese Frage kann nicht beantwortet werden. Felder „Wirkung" und „Dauer" in der Urliste befüllen.';
+    q3Answer = '';
   } else {
     var kandidaten = mitWert.filter(function(m){ return m.wert <= 2; });
     var teureKand  = kandidaten.filter(function(m){ return m.dauer * freqMonthly(m) >= 120; });
     if (teureKand.length === 0) {
-      q5Answer = 'Kein Meeting mit Wirkung ≤ 2 und hoher Zeitlast erkannt. Die bekannten Meetings mit geringer Wirkung haben vergleichsweise niedrigen Zeitaufwand.';
+      q3Answer = 'Kein Meeting mit Wirkung ≤ 2 und hoher Zeitlast erkannt. Die bekannten Meetings mit geringer Wirkung haben vergleichsweise niedrigen Zeitaufwand.';
     } else {
       var top = teureKand.sort(function(a, b){ return (b.dauer * freqMonthly(b)) - (a.dauer * freqMonthly(a)); });
-      var names5 = top.slice(0, 3).map(function(m){ return '"' + escapeHtml(m.name) + '"'; }).join(', ');
-      q5Answer = teureKand.length + ' Meeting' + (teureKand.length === 1 ? '' : 's') + ' mit Wirkung ≤ 2 und hoher Zeitbindung: ' + names5 + (teureKand.length > 3 ? ' u.a.' : '') + '. Kandidaten fuer &bdquo;result-neutral&ldquo; – Redesign oder Abschaffung pruefen.';
+      var names3 = top.slice(0, 3).map(function(m){ return '"' + escapeHtml(m.name) + '"'; }).join(', ');
+      q3Answer = teureKand.length + ' Meeting' + (teureKand.length === 1 ? '' : 's') + ' mit Wirkung ≤ 2 und hoher Zeitbindung: ' + names3 + (teureKand.length > 3 ? ' u.a.' : '') + '. Kandidaten fuer &bdquo;result-neutral&ldquo; – Redesign oder Abschaffung pruefen.';
     }
   }
 
-  // Q4 (frueher Q6): Was koennen wir aus diesen Daten NICHT schlussfolgern?
-  var q6Parts = [];
-  if (fl3 === 0) q6Parts.push('die strategische Entscheidungsebene (FL3 fehlt)');
-  if (fl2 === 0) q6Parts.push('wie abteilungsuebergreifende Abhaengigkeiten koordiniert werden (FL2 fehlt)');
+  // Q4: Was koennen wir aus diesen Daten NICHT schlussfolgern?
+  var q4Parts = [];
+  if (fl3 === 0) q4Parts.push('die strategische Entscheidungsebene (FL3 fehlt)');
+  if (fl2 === 0) q4Parts.push('wie abteilungsuebergreifende Abhaengigkeiten koordiniert werden (FL2 fehlt)');
   var ohneZweck = aktive.filter(function(m){ return !m.zweck || m.zweck.trim() === '' || m.zweck === '-'; }).length;
-  if (ohneZweck > aktive.length * 0.5) q6Parts.push('die inhaltliche Ausrichtung der Meetings (Zweck-Feld mehrheitlich leer)');
-  if (q6Parts.length === 0) {
-    q6Parts.push('keine wesentlichen blinden Flecken – Datenlage ist gut');
+  if (ohneZweck > aktive.length * 0.5) q4Parts.push('die inhaltliche Ausrichtung der Meetings (Zweck-Feld mehrheitlich leer)');
+  if (q4Parts.length === 0) {
+    q4Parts.push('keine wesentlichen blinden Flecken – Datenlage ist gut');
   }
-  var q6Answer = 'Auf Basis der vorliegenden Daten koennen wir nichts sagen ueber: ' + q6Parts.join(', ') + '. Eine Analyse auf Basis unvollstaendiger Daten kann verzerren – fehlende Informationen sollten in der Quelltabelle nachgepflegt werden.';
+  var q4Answer = 'Auf Basis der vorliegenden Daten koennen wir nichts sagen ueber: ' + q4Parts.join(', ') + '. Eine Analyse auf Basis unvollstaendiger Daten kann verzerren – fehlende Informationen sollten in der Quelltabelle nachgepflegt werden.';
 
   // Ampel-Status pro Frage: ✓ gut beantwortbar · ⚠ Einschränkung · ✕ Datenlücke/Handlungsbedarf
   var GOOD = { color: COLORS.ok,   icon: '✓', word: 'Befund' };
@@ -4862,12 +4865,12 @@ function _renderFLSchluesselFragen(aktive, byFL) {
 
   var q1St = (fl2 === 0) ? BAD : GOOD;
   var q2St = (fl2 === 0) ? BAD : ((maxPairs === 0 || missingPairs > 0) ? WARN : GOOD);
-  var q5teure = mitWert.length
+  var q3teure = mitWert.length
     ? mitWert.filter(function(m){ return m.wirkungEffektiv <= 2 && m.dauer * freqMonthly(m) >= 120; }).length
     : 0;
-  var q5St = (mitWert.length === 0) ? BAD : (q5teure > 0 ? WARN : GOOD);
-  var q6Major = (fl3 === 0 || fl2 === 0);
-  var q6St = q6Major ? BAD : ((ohneZweck > aktive.length * 0.5) ? WARN : GOOD);
+  var q3St = (mitWert.length === 0) ? BAD : (q3teure > 0 ? WARN : GOOD);
+  var q4Major = (fl3 === 0 || fl2 === 0);
+  var q4St = q4Major ? BAD : ((ohneZweck > aktive.length * 0.5) ? WARN : GOOD);
 
   // Karten bauen
   function makeCard(nr, frage, antwort, fehlt, st) {
@@ -4886,8 +4889,8 @@ function _renderFLSchluesselFragen(aktive, byFL) {
     + '<p style="font-size:.8rem;color:#6b7280;margin:0 0 12px;line-height:1.5">Tool-eigene Auswertungsfragen, verankert in den Leitfragen des Modells. Die farbige Markierung zeigt, wie gut jede Frage mit euren Daten beantwortbar ist.</p>'
     + makeCard(1, 'Existiert eine Koordinationsebene zwischen operativer Arbeit und Strategie?', q1Answer, q1Missing, q1St)
     + makeCard(2, 'Werden Abhaengigkeiten zwischen Abteilungen strukturell sichtbar gemacht?', q2Answer, q2Missing, q2St)
-    + makeCard(3, 'Gibt es Meetings, die viel Zeit kosten aber wenig Wirkung zeigen?', q5Answer, q5Missing, q5St)
-    + makeCard(4, 'Was koennen wir aus diesen Daten nicht schlussfolgern?', q6Answer, '', q6St);
+    + makeCard(3, 'Gibt es Meetings, die viel Zeit kosten aber wenig Wirkung zeigen?', q3Answer, q3Missing, q3St)
+    + makeCard(4, 'Was koennen wir aus diesen Daten nicht schlussfolgern?', q4Answer, '', q4St);
 }
 
 // ── Organigramm ───────────────────────────────────────────────────────────────

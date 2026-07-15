@@ -591,13 +591,14 @@ textarea#paste-area::placeholder{color:#cbd5e1}
     </div>
 
     <div class="dp-section" id="sec-mein-input">
-      <p class="dp-section-title">Individuelle Impulse zur Datenoptimierung</p>
-      <p class="dp-section-desc">Trag deinen Namen oder dein Kürzel ein – du siehst sofort, welche deiner Meetings noch Lücken in der Urliste haben.</p>
+      <p class="dp-section-title">Dein persönliches Cockpit</p>
+      <p class="dp-section-desc">Trag deinen Namen oder dein Kürzel ein – du siehst deine Organisationssignale und offene Datenpflege-Punkte.</p>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
         <input type="text" id="mein-name-input" placeholder="Name oder Kürzel (z. B. MB)"
                style="padding:6px 12px;border:1.5px solid #d1d5db;border-radius:6px;font-size:.87rem;width:260px;outline:none;font-family:inherit"
                oninput="renderMeinInputSection()">
       </div>
+      <div id="mein-input-org-signale"></div>
       <div id="mein-input-result"></div>
     </div>
 
@@ -684,7 +685,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "15.07.2026 16:02";
+const APP_VERSION = "15.07.2026 23:38";
 const ALIAS_MAP = {
   // Beispiel: "max": "Max"
 };
@@ -738,6 +739,12 @@ const COLORS = {
 // Schwellenwerte
 const CONFIDENCE_AMBIGUOUS = 0.7;                 // Personen-Zuordnung darunter = unsicher (gelber Punkt)
 const QUALITY_THRESHOLDS   = { green: 80, yellow: 50 };  // Datenqualitäts-Ampel in % (≥80 grün · 50–79 gelb · <50 rot)
+
+// Wiederverwendbare Status-Objekte (Farbe + Icon + Wort) für Befund-Karten – eine Quelle,
+// genutzt vom Befund-Tab UND den Organisationssignalen im FK-Cockpit.
+const STATUS_KRITISCH = { color: COLORS.bad,     icon: "⚠", word: "Kritisch" };
+const STATUS_PRUEFEN  = { color: COLORS.warn,    icon: "⚠", word: "Prüfen"  };
+const STATUS_INFO     = { color: COLORS.neutral, icon: "ℹ", word: "Info"    };
 
 // ── Plotly-Basis-Layout (Standard-Charts, DM Sans, weißer Hintergrund) ────────
 const FONT_MAIN = "DM Sans, system-ui, sans-serif";
@@ -3874,6 +3881,175 @@ function _collectImpulseEntries(nameLower) {
   return entries;
 }
 
+// Alle Objekt-Keys, deren (kleingeschriebener) Name den Suchbegriff enthält – dieselbe
+// unscharfe Zuordnung wie _collectImpulseEntries, damit "Mein Input" konsistent bleibt.
+function _matchingKeys(obj, nameLower) {
+  return Object.keys(obj).filter(function(k){ return k.toLowerCase().includes(nameLower); });
+}
+
+// Organisationssignale: verdichtet bestehende Diagnosen (Wirkung/Flight-Levels/Engpass/
+// Zeitverteilung) auf die Person, die ihr Kürzel eingibt. Spiegelt dieselben Filter/
+// Schwellen wie collectBefunde() und die jeweiligen Detail-Tabs – keine neue Diagnoselogik.
+function _computeOrgSignale(nameLower, allEntries) {
+  var ownAsResp = allEntries.filter(function(e){ return e.rolle === 'V'; }).map(function(e){ return e.m; });
+  var signale = [];
+
+  // 1) Eigene Meetings im Optimieren-/Hinterfragen-Quadranten – wie Wirkungsmatrix (Tab 8)
+  var aktiveAlle = MEETINGS.filter(function(m){ return !m.ist_platzhalter; });
+  var alleWirkung = aktiveAlle.filter(function(m){ return m.dauer !== null && m.wert !== null; });
+  if (alleWirkung.length) {
+    var xVals = alleWirkung.map(function(m){ return m.dauer * freqMonthly(m) / 60; });
+    var sortedX = xVals.slice().sort(function(a,b){ return a-b; });
+    var xMedian = sortedX.length % 2 === 0
+      ? (sortedX[sortedX.length/2-1] + sortedX[sortedX.length/2]) / 2
+      : sortedX[Math.floor(sortedX.length/2)];
+    var quadrantBasis = _basisNote(alleWirkung.length, aktiveAlle.length, 'der Meetings org-weit mit Dauer + Wirkung bewertet');
+    var ownOptimieren = [], ownHinterfragen = [];
+    ownAsResp.forEach(function(m) {
+      if (m.dauer === null || m.wert === null || m.ist_platzhalter) return;
+      var x = m.dauer * freqMonthly(m) / 60;
+      if (m.wirkungEffektiv <= 2) {
+        if (x > xMedian) ownOptimieren.push(m); else ownHinterfragen.push(m);
+      }
+    });
+    if (ownOptimieren.length) {
+      signale.push({
+        st: STATUS_KRITISCH,
+        label: ownOptimieren.length + ' Meeting' + (ownOptimieren.length===1?'':'s') + ' im Optimieren-Quadranten',
+        detail: ownOptimieren.slice(0,3).map(function(m){ return '"' + escapeHtml(m.name) + '"'; }).join(', ') + (ownOptimieren.length>3?' u.a.':'') + ' – hoher Zeitaufwand, Wirkung ≤ 2 (deine eigenen Meetings). Redesign oder Abschaffung prüfen.',
+        tabIdx: 8, tabLabel: 'Wirkung', basisNote: quadrantBasis
+      });
+    }
+    if (ownHinterfragen.length) {
+      signale.push({
+        st: STATUS_PRUEFEN,
+        label: ownHinterfragen.length + ' Meeting' + (ownHinterfragen.length===1?'':'s') + ' im Hinterfragen-Quadranten',
+        detail: ownHinterfragen.slice(0,3).map(function(m){ return '"' + escapeHtml(m.name) + '"'; }).join(', ') + (ownHinterfragen.length>3?' u.a.':'') + ' – geringer Zeitaufwand, aber Wirkung ≤ 2 (deine eigenen Meetings). Mehrwert prüfen.',
+        tabIdx: 8, tabLabel: 'Wirkung', basisNote: quadrantBasis
+      });
+    }
+  }
+
+  // 2) Router-Status – wie Flight Levels F4
+  var pFlH = _flPersonHoursByLevel(aktiveAlle);
+  var flKeys = _matchingKeys(pFlH, nameLower);
+  if (flKeys.some(function(k){ return _flOnAllLevels(pFlH[k]); })) {
+    signale.push({
+      st: STATUS_KRITISCH,
+      label: 'Du bist auf allen 3 Flight Levels präsent',
+      detail: 'Information läuft in deiner Rolle womöglich über dich statt über Boards. Prüfen, ob ein Board fehlt, das dich entlasten könnte.',
+      tabIdx: 10, tabLabel: 'Flight Levels', basisNote: null
+    });
+  }
+
+  // 3) Engpass-Rang + eigene Zeitlast – wie Engpass-Briefing (Tab 6)
+  var distinctCount = {}, zeitSum = {};
+  MEETINGS.forEach(function(m) {
+    var beteiligte = {};
+    if (m.verantwortlich) beteiligte[m.verantwortlich] = true;
+    m.teilnehmer.forEach(function(t){ beteiligte[t] = true; });
+    var monMin = m.dauer !== null ? m.dauer * freqMonthly(m) : null;
+    Object.keys(beteiligte).forEach(function(p) {
+      distinctCount[p] = (distinctCount[p]||0) + 1;
+      if (monMin !== null) zeitSum[p] = (zeitSum[p]||0) + monMin;
+    });
+  });
+  var rangKeys = _matchingKeys(distinctCount, nameLower);
+  if (rangKeys.length) {
+    var topKey = rangKeys.sort(function(a,b){ return distinctCount[b]-distinctCount[a]; })[0];
+    var sortedPersons = Object.keys(distinctCount).sort(function(a,b){ return distinctCount[b]-distinctCount[a]; });
+    var rang = sortedPersons.indexOf(topKey) + 1;
+    if (rang <= 10) {
+      var eigeneZeit = zeitSum[topKey] ? round1(zeitSum[topKey]/60) : null;
+      signale.push({
+        st: STATUS_PRUEFEN,
+        label: 'Platz ' + rang + ' von ' + sortedPersons.length + ' bei der Meeting-Last',
+        detail: distinctCount[topKey] + ' Meetings' + (eigeneZeit !== null ? ' · ' + eigeneZeit + ' Stunden/Monat gebunden' : '') + '. Ist die Last fair verteilt, oder ließe sich delegieren?',
+        tabIdx: 6, tabLabel: 'Engpass', basisNote: null
+      });
+    }
+  }
+
+  // 4) Gebundene Personen-Stunden der eigenen Meetings – wie Zeitverteilung (Tab 7)
+  var eigenePersonenStunden = ownAsResp.reduce(function(sum, m) {
+    return sum + (m.dauer !== null ? monthlyHours(m) * (m.teilnehmer.length || 1) : 0);
+  }, 0);
+  if (eigenePersonenStunden > 0) {
+    signale.push({
+      st: STATUS_INFO,
+      label: round1(eigenePersonenStunden) + ' Personen-Stunden/Monat binden deine Meetings',
+      detail: 'Gesamte Organisationszeit, die durch die von dir verantworteten Meetings gebunden wird (Dauer × Häufigkeit × Teilnehmerzahl).',
+      tabIdx: 7, tabLabel: 'Zeitverteilung', basisNote: null
+    });
+  }
+
+  // 5) Wirkungs-Konflikte in eigenen Meetings – wie Mein-Input-Badge
+  var qmTeilnehmerWirkung = computeQualityMetrics().filter(function(x){ return x.label === 'Teilnehmer-Wirkung erfasst'; })[0];
+  var konflikte = ownAsResp.filter(function(m){
+    return m.wertVerantwortlich !== null && m.wertTeilnehmerAvg !== null && Math.abs(m.wertVerantwortlich - m.wertTeilnehmerAvg) > 2;
+  });
+  if (konflikte.length) {
+    signale.push({
+      st: STATUS_PRUEFEN,
+      label: konflikte.length + ' Wirkungs-Konflikt' + (konflikte.length===1?'':'e') + ' in deinen Meetings',
+      detail: konflikte.slice(0,3).map(function(m){ return '"' + escapeHtml(m.name) + '"'; }).join(', ') + (konflikte.length>3?' u.a.':'') + ' – deine Einschätzung zur Wirkung weicht stark von der des Teams ab. Konsens herstellen?',
+      tabIdx: 9, tabLabel: 'Alle Meetings',
+      basisNote: qmTeilnehmerWirkung ? _basisNote(qmTeilnehmerWirkung.count, qmTeilnehmerWirkung.tot, 'der Meetings mit Teilnehmer-Wirkung erfasst (weitere Konflikte ggf. unentdeckt)') : null
+    });
+  }
+
+  // 6) Delegations-Hinweis: hoher Eigenanteil an den Meetings der eigenen Abteilung
+  var abtKeys = _matchingKeys(effectivePersonAbt, nameLower);
+  if (abtKeys.length) {
+    var abt = effectivePersonAbt[abtKeys[0]];
+    var abtMeetings = activeMeetings().filter(function(m){ return m.abteilung === abt; });
+    if (abtMeetings.length >= 3) {
+      var eigeneAbtMeetings = abtMeetings.filter(function(m){ return m.verantwortlich && m.verantwortlich.toLowerCase().includes(nameLower); });
+      var anteil = eigeneAbtMeetings.length / abtMeetings.length;
+      if (anteil > 0.7) {
+        signale.push({
+          st: STATUS_PRUEFEN,
+          label: Math.round(anteil*100) + '% der ' + escapeHtml(abt) + '-Meetings verantwortest du selbst',
+          detail: eigeneAbtMeetings.length + ' von ' + abtMeetings.length + ' aktiven Meetings deiner Abteilung. Delegation an Team-Mitglieder prüfen?',
+          tabIdx: 2, tabLabel: 'Abteilungen', basisNote: null
+        });
+      }
+    }
+  }
+
+  // 7) Auffällig große eigene Runden (Teilnehmerzahl > 2× Organisations-Median)
+  var alleTeilnehmerzahlen = activeMeetings().map(function(m){ return m.teilnehmer.length; }).sort(function(a,b){ return a-b; });
+  if (alleTeilnehmerzahlen.length) {
+    var medianTn = alleTeilnehmerzahlen.length % 2 === 0
+      ? (alleTeilnehmerzahlen[alleTeilnehmerzahlen.length/2-1] + alleTeilnehmerzahlen[alleTeilnehmerzahlen.length/2]) / 2
+      : alleTeilnehmerzahlen[Math.floor(alleTeilnehmerzahlen.length/2)];
+    var grosseRunden = ownAsResp.filter(function(m){ return m.status === 'Aktiv' && m.teilnehmer.length > medianTn * 2; });
+    if (grosseRunden.length) {
+      signale.push({
+        st: STATUS_PRUEFEN,
+        label: grosseRunden.length + ' Meeting' + (grosseRunden.length===1?'':'s') + ' mit auffällig vielen Teilnehmern',
+        detail: grosseRunden.slice(0,3).map(function(m){ return '"' + escapeHtml(m.name) + '" (' + m.teilnehmer.length + ' Teiln.)'; }).join(', ') + (grosseRunden.length>3?' u.a.':'') + ' – mehr als doppelt so viele Teilnehmer wie im Organisations-Median (' + medianTn + '). Braucht es wirklich alle?',
+        tabIdx: 9, tabLabel: 'Alle Meetings', basisNote: null
+      });
+    }
+  }
+
+  return signale;
+}
+
+// Rendert die Organisationssignale-Sektion inkl. Reflexions-Impuls (persistenter Denkanstoss).
+// Nutzt _befundCard() (Block 3) wieder – identische Kartenoptik wie im Befund-Tab.
+function _renderOrgSignaleSection(nameLower, allEntries) {
+  var signale = _computeOrgSignale(nameLower, allEntries);
+  var cards = signale.length
+    ? signale.map(function(item){ return _befundCard(item, item.st); }).join('')
+    : '<div class="fl-question" style="border-left:4px solid ' + COLORS.ok + '">'
+      + '<div class="fl-q-answer" style="color:' + COLORS.ok + ';font-weight:600">&#10003; Keine besonderen Organisationssignale erkannt.</div></div>';
+  return '<p class="fl-section-title" style="margin-top:0">Deine Organisationssignale</p>'
+    + _reflexionsImpulsBox()
+    + cards;
+}
+
 // Persistenter Reflexions-Impuls: erscheint immer, sobald eigene Meetings gefunden wurden -
 // bewusst keine Ampelfarbe, da kein Status, sondern ein Denkanstoss (nicht automatisch pruefbar)
 function _reflexionsImpulsBox() {
@@ -3903,8 +4079,9 @@ function _renderImpulseCard(entry) {
     + '</div>';
 }
 
-// Orchestrator: Name lesen, Einträge sammeln, Grid rendern
+// Orchestrator: Name lesen, Einträge sammeln, Organisationssignale + Datenpflege-Grid rendern
 function renderMeinInputSection() {
+  var orgDiv = document.getElementById("mein-input-org-signale");
   var resultDiv = document.getElementById("mein-input-result");
   if (!resultDiv) return;
 
@@ -3919,11 +4096,13 @@ function renderMeinInputSection() {
   } catch(e) {}
 
   if (!name) {
+    if (orgDiv) orgDiv.innerHTML = '';
     resultDiv.innerHTML = '<p class="dp-section-desc" style="color:#94a3b8;margin:0">Gib deinen Namen oder dein Kürzel ein, um deine offenen Punkte zu sehen.</p>';
     return;
   }
 
   if (!MEETINGS || !MEETINGS.length) {
+    if (orgDiv) orgDiv.innerHTML = '';
     resultDiv.innerHTML = '<p class="dp-section-desc" style="color:#94a3b8;margin:0">Noch keine Daten geladen.</p>';
     return;
   }
@@ -3931,24 +4110,28 @@ function renderMeinInputSection() {
   var allEntries = _collectImpulseEntries(name.toLowerCase());
 
   if (allEntries.length === 0) {
+    if (orgDiv) orgDiv.innerHTML = '';
     resultDiv.innerHTML = '<p class="dp-section-desc" style="color:#94a3b8;margin:0">Kein Meeting mit Name oder Kürzel „' + escapeHtml(name) + '" gefunden.</p>';
     return;
   }
+
+  if (orgDiv) orgDiv.innerHTML = _renderOrgSignaleSection(name.toLowerCase(), allEntries);
 
   // Nur Meetings mit Handlungsbedarf anzeigen
   var totalMeetings = allEntries.length;
   var problemEntries = allEntries.filter(function(e) { return e.issues.length > 0; });
   var issueCount = problemEntries.length;
+  var dpTitle = '<p class="fl-section-title">Deine Datenpflege</p>';
 
   if (issueCount === 0) {
-    resultDiv.innerHTML = _reflexionsImpulsBox()
+    resultDiv.innerHTML = dpTitle
       + '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;font-size:.84rem;color:#166534">'
       + '&#10003; Alle ' + totalMeetings + ' Meetings von „' + escapeHtml(name) + '" sind vollständig erfasst.'
       + '</div>';
     return;
   }
 
-  var html = _reflexionsImpulsBox()
+  var html = dpTitle
     + '<p style="font-size:.82rem;color:#374151;margin-bottom:10px">'
     + '<strong>' + totalMeetings + ' Meeting' + (totalMeetings !== 1 ? 's' : '') + '</strong>'
     + ' von „' + escapeHtml(name) + '" – <strong style="color:#dc2626">' + issueCount + '</strong> mit Handlungsbedarf</p>';
@@ -5119,8 +5302,6 @@ function renderBefund() {
   if (!MEETINGS.length) { el.innerHTML = ''; return; }
 
   var b = collectBefunde();
-  var KRITISCH = { color: COLORS.bad,  icon: '⚠', word: 'Kritisch' };
-  var PRUEFEN  = { color: COLORS.warn, icon: '⚠', word: 'Prüfen' };
 
   function section(title, items, st, emptyText) {
     var body = items.length
@@ -5131,8 +5312,8 @@ function renderBefund() {
   }
 
   el.innerHTML =
-      section('Kritisch', b.kritisch, KRITISCH, 'Keine kritischen Befunde erkannt.')
-    + section('Prüfen', b.pruefen, PRUEFEN, 'Keine auffälligen Muster erkannt.');
+      section('Kritisch', b.kritisch, STATUS_KRITISCH, 'Keine kritischen Befunde erkannt.')
+    + section('Prüfen', b.pruefen, STATUS_PRUEFEN, 'Keine auffälligen Muster erkannt.');
 }
 
 // ── Organigramm ───────────────────────────────────────────────────────────────

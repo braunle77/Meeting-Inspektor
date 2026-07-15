@@ -3,6 +3,7 @@
 *.xls
 *.csv
 # Ausnahme: testdaten.tsv ist synthetisch und absichtlich versioniert (.tsv nicht ignoriert)
+data.tsv
 
 # Lokaler Session-Kontext – nicht auf GitHub
 CLAUDE_CONTEXT.md

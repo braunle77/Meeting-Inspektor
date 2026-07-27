@@ -8,6 +8,9 @@ data.tsv
 # Lokaler Session-Kontext – nicht auf GitHub
 CLAUDE_CONTEXT.md
 
+# Urheberrechtlich geschütztes Referenzmaterial – bleibt lokal, nie committen
+*.pdf
+
 # Python
 __pycache__/
 *.pyc

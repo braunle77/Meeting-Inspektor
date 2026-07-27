@@ -1,5 +1,15 @@
 # Flight Levels – Referenz aus Originalquellen
 
+> **⚠ Überholt seit 27.07.2026.** Diese Recherche basiert auf der englischen Buchausgabe
+> (*„Flight Levels – A Short Introduction"*) und auf flightlevels.io. Seit heute gilt
+> **ausschließlich die deutsche Originalausgabe** (Kaltenecker/Leopold, *„Flight Levels –
+> Eine kurze Einführung"*, dpunkt.verlag 2022) als Quelle — siehe
+> [`flight-levels-buch-de-2022.md`](flight-levels-buch-de-2022.md). Aussagen in diesem
+> Dokument, die sich dort nicht wiederfinden (u. a. die offiziellen Leitfragen je Level von
+> flightlevels.io, das Zitat „Stop using people as routers") gelten nicht mehr als
+> Modell-Beleg. Diese Datei bleibt als historisches Dokument erhalten, ist aber nicht mehr
+> die verbindliche Referenz.
+
 **Zweck:** Verbindliche Referenz für F001 (quellentreuer Neuaufbau des Flight-Levels-Tabs).
 Jede fachliche Aussage im Tool muss sich hierauf zurückführen lassen oder als tool-eigene
 Auswertung gekennzeichnet sein.

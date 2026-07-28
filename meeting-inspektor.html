@@ -683,7 +683,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "27.07.2026 15:20";
+const APP_VERSION = "28.07.2026 15:05";
 const ALLOWED_FILE_EXTENSIONS = ['.csv', '.tsv', '.txt'];
 const ALLOWED_FILE_MIME_TYPES  = ['text/csv', 'text/tab-separated-values', 'text/plain'];
 const ALIAS_MAP = {
@@ -1522,7 +1522,7 @@ const TAB_INFO = {
   6: { title: "Meeting-Last pro Person (Engpass)",
        was: "Zwei getrennte Rollen-Balken pro Person: Blau = als Verantwortliche/r, Teal = als Teilnehmer/in (nicht addieren – bei Doppelrolle meinen beide dieselbe Meeting-Zeit). Das Briefing oben zählt jedes Meeting nur einmal.",
        achten: "Sehr lange Balken signalisieren Überlastungsrisiko. Viel Blau = hohe Verantwortungslast durch Meetingführung.",
-       folgefragen: "Wer ist am stärksten belastet? Ist die Last fair verteilt? Welche Meetings könnten delegiert werden?" },
+       folgefragen: "Wer ist am stärksten belastet? Ist die Last fair verteilt, oder wirkt hier jemand auf der falschen Flugebene und kaschiert damit eine Koordinationslücke?" },
   7: { title: "Zeitverteilung (Personen-Stunden/Monat)",
        was: "Fläche = monatliche Personen-Stunden: Dauer × Häufigkeit × Teilnehmerzahl. Größer = mehr kollektive Zeit der gesamten Organisation.",
        achten: "Die größten Flächen sind die teuersten Meetings der Organisation – entweder weil sie wertvoll sind, oder weil sie überdimensioniert sind.",
@@ -4180,7 +4180,7 @@ function _computeOrgSignale(nameLower, allEntries) {
       signale.push({
         st: STATUS_PRUEFEN,
         label: 'Platz ' + rang + ' von ' + sortedPersons.length + ' bei der Meeting-Last',
-        detail: distinctCount[topKey] + ' Meetings' + (eigeneZeit !== null ? ' · ' + eigeneZeit + ' Stunden/Monat gebunden' : '') + '. Ist die Last fair verteilt, oder ließe sich delegieren?',
+        detail: distinctCount[topKey] + ' Meetings' + (eigeneZeit !== null ? ' · ' + eigeneZeit + ' Stunden/Monat gebunden' : '') + '. Wirkst du hier auf der richtigen Flugebene, oder kaschiert deine operative Präsenz eine Koordinationslücke?',
         tabIdx: 6, tabLabel: 'Engpass', basisNote: null
       });
     }
@@ -4226,7 +4226,7 @@ function _computeOrgSignale(nameLower, allEntries) {
         signale.push({
           st: STATUS_PRUEFEN,
           label: Math.round(anteil*100) + '% der ' + escapeHtml(abt) + '-Meetings verantwortest du selbst',
-          detail: eigeneAbtMeetings.length + ' von ' + abtMeetings.length + ' aktiven Meetings deiner Abteilung. Delegation an Team-Mitglieder prüfen?',
+          detail: eigeneAbtMeetings.length + ' von ' + abtMeetings.length + ' aktiven Meetings deiner Abteilung. Wirkt deine Führung hier auf der richtigen Flugebene, oder kaschiert dein Verbleib im FL1-Meeting eine echte Koordinationslücke?',
           tabIdx: 2, tabLabel: 'Abteilungen', basisNote: null
         });
       }
@@ -5417,7 +5417,7 @@ function collectBefunde() {
     var top10FK = top10.filter(function(p){ return fkSet.has(p); }).length;
     pruefen.push({
       label: escapeHtml(top1) + ' stärkst beansprucht (' + distinctCount[top1] + ' Meetings)',
-      detail: 'FK-Anteil unter den Top ' + top10.length + ' meistbeschäftigten Personen: ' + top10FK + '/' + top10.length + '. Ist die Last fair verteilt, könnten Meetings delegiert werden?',
+      detail: 'FK-Anteil unter den Top ' + top10.length + ' meistbeschäftigten Personen: ' + top10FK + '/' + top10.length + '. Wirkt Führung hier auf der richtigen Flugebene, oder kaschiert die operative Präsenz eine Koordinationslücke?',
       tabIdx: 6, tabLabel: 'Engpass', basisNote: null
     });
   }

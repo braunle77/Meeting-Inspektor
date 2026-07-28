@@ -315,11 +315,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 .fl-badge-auto{opacity:.55}
 /* FL Guided Experience */
 .fl-intro-card{background:#f7fbfa;border-radius:10px;border:1px solid #d8e8e4;overflow:hidden}
-.fl-intro-toggle{background:none;border:none;cursor:pointer;font-size:.77rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#3a5b57;padding:13px 18px;display:flex;align-items:center;gap:8px;width:100%;text-align:left;transition:background .15s}
-.fl-intro-toggle:hover{background:#eaf4f1}
-.fl-intro-chevron{display:inline-block;transition:transform .2s;font-size:.68rem;color:#59B2A5}
-.fl-intro-toggle.open .fl-intro-chevron{transform:rotate(90deg)}
-.fl-intro-hint{margin-left:auto;font-size:.7rem;font-weight:600;text-transform:none;letter-spacing:0;color:#8aa6a1;flex-shrink:0}
+.fl-intro-header{font-size:.77rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#3a5b57;padding:13px 18px}
 .fl-intro-body{padding:2px 18px 16px}
 .fl-level-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:12px 0 6px}
 @media(max-width:600px){.fl-level-grid{grid-template-columns:1fr}}
@@ -569,16 +565,6 @@ textarea#paste-area::placeholder{color:#cbd5e1}
     <div id="fl-alert-f1" class="fl-alert"></div>
     <p class="hint">Anzahl klassifizierter Meetings je Ebene – die Zahlen zeigen, welche Ebenen in der Urliste erfasst sind.</p>
 
-    <p class="fl-section-title">Koordinations-Lücken zwischen Abteilungen</p>
-    <div class="chart-card" id="chart-fl-matrix"></div>
-    <div id="fl-alert-f2" class="fl-alert"></div>
-    <p class="hint">Folgende Impulse aus der Datenanalyse: Zellwert = Anzahl FL2-Meetings, die beide Abteilungen verbinden. Weiße Felder = kein gemeinsames Koordinationsformat. FL2 visualisiert den Wertstrom über Teams hinweg – im Idealfall Ende-zu-Ende, in der Praxis oft nur ein Teilabschnitt.</p>
-
-    <p class="fl-section-title">Wirkungsgrad nach Ebene</p>
-    <div class="chart-card" id="chart-fl-wirkung"></div>
-    <div id="fl-alert-f3" class="fl-alert"></div>
-    <p class="hint">Wirkung aus der Urliste (1–4). Meetings ohne Substanz sind ergebnisneutral: nichts Wesentliches gesagt, nichts entschieden. Niedrige Wirkung ist ein Kandidaten-Signal dafür.</p>
-
     <p class="fl-section-title">Rhythmus-Übersicht je Ebene</p>
     <div class="chart-card" id="chart-fl-frequenz"></div>
     <div id="fl-alert-f5" class="fl-alert"></div>
@@ -683,7 +669,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "28.07.2026 16:30";
+const APP_VERSION = "28.07.2026 16:58";
 const ALLOWED_FILE_EXTENSIONS = ['.csv', '.tsv', '.txt'];
 const ALLOWED_FILE_MIME_TYPES  = ['text/csv', 'text/tab-separated-values', 'text/plain'];
 const ALIAS_MAP = {
@@ -1538,7 +1524,7 @@ const TAB_INFO = {
        achten: "Meetings ohne Wirkungsbewertung fehlen in der Wirkungsmatrix. Nutze die Suche, um alle Meetings einer Person oder Abteilung zu finden.",
        folgefragen: "Welche Meetings haben noch keine Wirkungsbewertung? Gibt es Meetings, die nicht mehr stattfinden, aber noch als Aktiv geführt sind?" },
   10: { title: "Flight Levels – Kommunikationsfluss-Diagnose",
-        was: "Fünf Visualisierungen: Teilnahme in Flight Levels, Verteilung je Flight Level, FL2-Verbindungsmatrix, Wirkungsgrad nach Ebene und Rhythmus-Übersicht.",
+        was: "Drei Visualisierungen: Teilnahme in Flight Levels, Verteilung je Flight Level und Rhythmus-Übersicht.",
         achten: "FL1 Operativ: tägliche Teamarbeit, methodenagnostisch. FL2 Koordination: macht den Wertstrom zwischen Teams sichtbar, managt Abhängigkeiten. FL3 Strategisches Portfoliomanagement – drei Leitfragen: Wie sieht unsere Strategie aus? Welche Outcomes wollen wir in welchen Zeithorizonten erreichen? Welche Aktionen leiten wir ab? Motor sind fünf Kernaktivitäten auf allen Ebenen (die &bdquo;Flugverkehrskontrolle&ldquo;): Situation visualisieren, Fokus schaffen, regelmäßig kommunizieren, Fortschritt messen, Verbesserungen durchführen. Die FL-Zuordnung erfolgt heuristisch über Abteilungstypen (im Konfiguration-Tab pflegbar).",
         folgefragen: "Die vier Schlüsselfragen für Kommunikationsformate: Kommunikation zur Organisation – wie schaffen wir Koordination in kurzen Schleifen? Kommunikation zum Inhalt – wie entscheiden wir, was wir tun? Kommunikation zu Zuständigkeiten und Abläufen – wie entscheiden wir, wie wir etwas tun? Kommunikation über die Qualität – wie werden wir besser? Folgende Impulse aus der Datenanalyse: Welche Meetings sind ergebnisneutral, und nehmen die richtigen Personen auf der richtigen Ebene teil?" },
 };
@@ -3768,8 +3754,8 @@ function _renderAbteilungsScorecard() {
   var aktive = activeMeetings();
   var aktiveOhnePlatzhalter = MEETINGS.filter(function(m){ return !m.ist_platzhalter; });
 
-  // FL2-Verbindungen zwischen Hauptabteilungen – wie _renderFLMatrix im Flight-Levels-Tab,
-  // damit die Zahlen zwischen Scorecard und Flight-Levels-Tab übereinstimmen.
+  // FL2-Verbindungen zwischen Hauptabteilungen – wie die Kachel "Koordinations-Lücken"
+  // in "Flight Levels – Auf einen Blick", damit die Zahlen übereinstimmen.
   var mainDepts = allDepts.filter(function(d){ return !SPECIAL_DEPTS.find(function(s){ return s.key===d; }); });
   var conn = {};
   aktiveOhnePlatzhalter.filter(function(m){ return m.flugebene === 'FL2'; }).forEach(function(m) {
@@ -4779,8 +4765,6 @@ function renderFlightLevels() {
   _renderFLDatenperspektive(aktive, byFL);
   _renderFLKpis(aktive, byFL);
   _renderFLVerteilung(aktive, byFL);
-  _renderFLMatrix(aktive, byFL);
-  _renderFLWirkung(aktive, byFL);
   _renderFLTeilnahmeDiagnose(aktive, byFL);
   _renderFLRhythmusMatrix(aktive, byFL);
   _renderFLSchluesselFragen(aktive, byFL);
@@ -4864,111 +4848,6 @@ function _renderFLVerteilung(aktive, byFL) {
       a.className = "fl-alert fl-alert-ok";
     }
     a.style.display = "";
-  }
-}
-
-// ── F2: FL2-Verbindungsmatrix ──────────────────────────────────────────────
-function _renderFLMatrix(aktive, byFL) {
-  const mainDepts = allDepts.filter(d => !SPECIAL_DEPTS.find(s => s.key === d));
-  const conn = {};
-  byFL["FL2"].forEach(m => {
-    const abtSet = new Set([m.abteilung]);
-    m.teilnehmer.forEach(t => { const a = effectivePersonAbt[t]; if (a && mainDepts.includes(a)) abtSet.add(a); });
-    const arr = [...abtSet].filter(a => mainDepts.includes(a));
-    for (let i = 0; i < arr.length; i++)
-      for (let j = i+1; j < arr.length; j++) {
-        const [a, b] = [arr[i], arr[j]].sort();
-        conn[a + "||" + b] = (conn[a + "||" + b] || 0) + 1;
-      }
-  });
-
-  const n = mainDepts.length;
-  if (n < 2) {
-    document.getElementById("chart-fl-matrix").innerHTML =
-      '<p style="padding:20px;color:#7a9e9a;font-size:.85em">Mindestens 2 Abteilungen erforderlich.</p>';
-  } else {
-    const z = mainDepts.map((_, i) => mainDepts.map((_, j) => {
-      if (i === j) return null;
-      const [a, b] = [mainDepts[i], mainDepts[j]].sort();
-      return conn[a + "||" + b] || 0;
-    }));
-    Plotly.newPlot("chart-fl-matrix", [{
-      type: "heatmap", x: mainDepts, y: mainDepts, z,
-      text: z.map(r => r.map(v => v === null ? "" : String(v))),
-      texttemplate: "%{text}",
-      colorscale: [[0, "#f0f9ff"], [0.001, "#bfdbfe"], [1, "#1e40af"]],
-      showscale: false, zmin: 0, hoverongaps: false,
-      hovertemplate: "%{y} ↔ %{x}: %{z} FL2-Meeting(s)<extra></extra>",
-      xgap: 2, ygap: 2
-    }], {
-      ...LAYOUT_BASE,
-      height: Math.max(300, n * 38 + 80),
-      margin: { l: 140, r: 20, t: 20, b: 120 },
-      xaxis: { tickangle: -40, automargin: true },
-      yaxis: { automargin: true }
-    }, { displayModeBar: false });
-  }
-
-  const a = document.getElementById("fl-alert-f2");
-  if (a && n >= 2) {
-    const missing = [];
-    for (let i = 0; i < n; i++)
-      for (let j = i+1; j < n; j++) {
-        const [d1, d2] = [mainDepts[i], mainDepts[j]].sort();
-        if (!conn[d1 + "||" + d2]) missing.push(`${d1} ↔ ${d2}`);
-      }
-    if (missing.length === 0) {
-      a.innerHTML = "<b>✓ Alle Abteilungen haben mind. eine FL2-Verbindung.</b>";
-      a.className = "fl-alert fl-alert-ok";
-    } else {
-      const shown = missing.slice(0, 5).join(" · ");
-      const more  = missing.length > 5 ? ` (+${missing.length - 5} weitere)` : "";
-      a.innerHTML = `<b>⚠ ${missing.length} fehlende FL2-Verbindungen</b> (kein gemeinsames Koordinationsformat):<br>${shown}${more}`;
-      a.className = "fl-alert fl-alert-warn";
-    }
-    a.style.display = "";
-  }
-}
-
-// ── F3: Wirkung nach Flugebene ─────────────────────────────────────────────
-function _renderFLWirkung(aktive, byFL) {
-  const rated = aktive.filter(m => m.flugebene && m.wert !== null);
-  if (rated.length < 3) {
-    document.getElementById("chart-fl-wirkung").innerHTML =
-      '<p style="padding:20px;color:#7a9e9a;font-size:.85em">Zu wenig Wirkungsbewertungen – Wirkung (1–4) in der Urliste ergänzen.</p>';
-  } else {
-    Plotly.newPlot("chart-fl-wirkung", FL_KEYS.map(fl => {
-      const ms = rated.filter(m => m.flugebene === fl);
-      return {
-        type: "box", name: FL_LABELS[fl],
-        y: ms.map(m => m.wirkungEffektiv), text: ms.map(m => escapeHtml(m.name)),
-        marker: { color: FL_COLORS[fl], size: 6 },
-        line: { color: FL_COLORS[fl] },
-        fillcolor: FL_COLORS[fl] + "22",
-        boxpoints: "all", jitter: 0.3, pointpos: 0,
-        hovertemplate: "%{text}<br>Wirkung: %{y}<extra></extra>"
-      };
-    }), {
-      ...LAYOUT_BASE,
-      height: 320, margin: { l: 50, r: 30, t: 16, b: 60 },
-      yaxis: { title: "Wirkung (1–4)", range: [0.5, 4.5], dtick: 1, gridcolor: COLORS.gridFine },
-      xaxis: { automargin: true }, showlegend: false
-    }, { displayModeBar: false });
-
-    const a = document.getElementById("fl-alert-f3");
-    if (a) {
-      const low = rated.filter(m => (m.flugebene === "FL2" || m.flugebene === "FL3") && m.wert <= 2);
-      if (low.length > 0) {
-        const names = low.slice(0, 3).map(m => `„${escapeHtml(m.name)}" (${m.flugebene}, Wirkg. ${m.wert})`).join(", ");
-        const more  = low.length > 3 ? ` +${low.length - 3} weitere` : "";
-        a.innerHTML = `<b>⚠ ${low.length} Koordinations-/Strategie-Meeting(s) mit Wirkung ≤ 2:</b> ${names}${more}. Kandidaten f&uuml;r &bdquo;ergebnisneutral&ldquo; &ndash; wird hier etwas entschieden, oder sind hinterher alle so schlau wie vorher?`;
-        a.className = "fl-alert fl-alert-warn";
-      } else {
-        a.innerHTML = "<b>✓ Alle FL2/FL3-Meetings haben Wirkung ≥ 3.</b> Kein Ergebnisneutral-Signal – die Interaktionen scheinen wahrgenommenen Mehrwert zu liefern.";
-        a.className = "fl-alert fl-alert-ok";
-      }
-      a.style.display = "";
-    }
   }
 }
 
@@ -5091,17 +4970,6 @@ function _renderFLRhythmusMatrix(aktive, byFL) {
 // FL Guided Experience – Einführung, Datenperspektive, Schlüsselfragen
 // ══════════════════════════════════════════════════════════════════════════════
 
-function _toggleFLEinfuehrung() {
-  var body = document.getElementById("fl-intro-body");
-  var btn  = document.getElementById("fl-intro-btn");
-  var hint = document.getElementById("fl-intro-hint");
-  if (!body || !btn) return;
-  var open = body.style.display !== "none";
-  body.style.display = open ? "none" : "";
-  btn.classList.toggle("open", !open);
-  if (hint) hint.textContent = open ? "einblenden" : "ausblenden";
-}
-
 function _renderFLEinfuehrung() {
   var el = document.getElementById("fl-einfuehrung");
   if (!el) return;
@@ -5135,12 +5003,8 @@ function _renderFLEinfuehrung() {
     + 'ohne Substanz sind &bdquo;ergebnisneutral&ldquo;. Die Analysen unten basieren auf der Urliste.</p>';
 
   el.innerHTML = '<div class="fl-intro-card">'
-    + '<button class="fl-intro-toggle" id="fl-intro-btn" onclick="_toggleFLEinfuehrung()">'
-    + '<span class="fl-intro-chevron">&#9654;</span>'
-    + '<span>Flight Levels – was steckt dahinter?</span>'
-    + '<span class="fl-intro-hint" id="fl-intro-hint">einblenden</span>'
-    + '</button>'
-    + '<div class="fl-intro-body" id="fl-intro-body" style="display:none">'
+    + '<div class="fl-intro-header">Flight Levels – was steckt dahinter?</div>'
+    + '<div class="fl-intro-body">'
     + introText
     + '</div></div>';
 }

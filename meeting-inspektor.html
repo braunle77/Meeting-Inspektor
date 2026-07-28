@@ -683,7 +683,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "28.07.2026 15:38";
+const APP_VERSION = "28.07.2026 15:39";
 const ALLOWED_FILE_EXTENSIONS = ['.csv', '.tsv', '.txt'];
 const ALLOWED_FILE_MIME_TYPES  = ['text/csv', 'text/tab-separated-values', 'text/plain'];
 const ALIAS_MAP = {
@@ -943,42 +943,44 @@ function isGruppenParticipant(name) {
 // ══════════════════════════════════════════════════════════════════════════════
 // Flight Levels – Auto-Klassifikation
 // ══════════════════════════════════════════════════════════════════════════════
+const FL_TYP_RANG = { strategisch: 3, koordination: 2, operativ: 1 };
+const FL_RANG_LABEL = { 3: "FL3", 2: "FL2", 1: "FL1" };
+
 function suggestFlightLevel(m) {
-  let s1 = 0, s2 = 0, s3 = 0;
-
-  // Stärkstes Signal: Abteilungstyp (gepflegt im Datenpflege-Tab)
+  // Stärkstes Signal: Abteilungstyp (gepflegt im Konfiguration-Tab) – der höchste
+  // Typ unter allen beteiligten Abteilungen (Organisator + bei übergreifenden
+  // Meetings auch die Teilnehmer-Abteilungen) entscheidet direkt, ohne Verwässerung
+  // durch Teilnehmerzahl/Rhythmus. Unterstützend/Extern liefern kein Signal (neutral).
+  const beteiligteTypen = [];
   const ownTyp = deptFunktionen[m.abteilung];
-  if (ownTyp === "strategisch")   s3 += 5;
-  if (ownTyp === "koordination")  s2 += 5;
-  if (ownTyp === "operativ")      s1 += 5;
-  // Unterstützend / Extern: kein starkes FL-Signal → neutral
-
-  // Teilnehmer-Abteilungstypen bei übergreifenden Meetings
+  if (ownTyp) beteiligteTypen.push(ownTyp);
   if (m.abteilungsuebergreifend) {
-    const deptTyps = [...new Set(m.teilnehmer.map(t => effectivePersonAbt[t]).filter(Boolean))]
+    const teilnehmerTypen = [...new Set(m.teilnehmer.map(t => effectivePersonAbt[t]).filter(Boolean))]
       .map(abt => deptFunktionen[abt]).filter(Boolean);
-    if (deptTyps.includes("strategisch"))   s3 += 3;
-    if (deptTyps.includes("koordination"))  s2 += 2;
+    beteiligteTypen.push(...teilnehmerTypen);
+  }
+  const gerankteTypen = beteiligteTypen.filter(t => FL_TYP_RANG[t]);
+  if (gerankteTypen.length) {
+    const hoechsterRang = Math.max(...gerankteTypen.map(t => FL_TYP_RANG[t]));
+    return FL_RANG_LABEL[hoechsterRang];
   }
 
-  // Abteilungsübergreifend (zweitstärkstes Signal wenn kein Typ gesetzt)
+  // Ersatz-Heuristik: greift nur, wenn keine beteiligte Abteilung getypt ist.
+  // Keine Keyword-Heuristik auf Kategorie/Zweck – Quelldaten werden nicht hardcoded.
+  let s1 = 0, s2 = 0, s3 = 0;
+
   if (m.abteilungsuebergreifend) { s2 += 3; s3 += 1; }
   else { s1 += 3; }
 
-  // Teilnehmeranzahl
   const n = m.teilnehmer_anzahl;
   if (n <= 4)       s1 += 1;
   else if (n <= 10) s2 += 1;
   else              s3 += 1;
 
-  // Rhythmus
   const r = m.rhythmus_klasse;
   if (r === "täglich" || r === "wöchentlich")                  s1 += 2;
   else if (r === "zweiwöchentlich" || r === "dreiwöchentlich") s2 += 2;
   else if (r === "monatlich" || r === "quartalsweise")         s3 += 2;
-
-  // Keine Keyword-Heuristik auf Kategorie/Zweck – Quelldaten werden nicht hardcoded.
-  // Abteilungstypen im Konfiguration-Tab sind der richtige Weg zur FL-Klassifikation.
 
   if (s3 >= s2 && s3 >= s1) return "FL3";
   if (s2 >= s1)             return "FL2";

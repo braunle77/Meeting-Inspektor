@@ -683,7 +683,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "28.07.2026 15:39";
+const APP_VERSION = "28.07.2026 16:22";
 const ALLOWED_FILE_EXTENSIONS = ['.csv', '.tsv', '.txt'];
 const ALLOWED_FILE_MIME_TYPES  = ['text/csv', 'text/tab-separated-values', 'text/plain'];
 const ALIAS_MAP = {
@@ -4787,14 +4787,17 @@ function renderFlightLevels() {
 }
 
 // ── KPI-Karten ────────────────────────────────────────────────────────────
+const FL_KPI_LABELS = { FL1: "Operativ (FL1)", FL2: "Koordination (FL2)", FL3: "Strategisch (FL3)" };
 function _renderFLKpis(aktive, byFL) {
   const kpiEl = document.getElementById("fl-kpi-cards");
   if (kpiEl) {
+    const total = FL_KEYS.reduce((s, fl) => s + byFL[fl].length, 0);
     kpiEl.innerHTML = FL_KEYS.map(fl => {
       const ms = byFL[fl], h = hPerMonth(ms).toFixed(1);
+      const pct = total > 0 ? Math.round(ms.length / total * 100) : 0;
       return `<div class="fl-kpi-card" style="background:${FL_COLORS[fl]}10;border:1px solid ${FL_COLORS[fl]}35">
-        <div class="fl-kpi-label" style="color:${FL_COLORS[fl]}">${FL_LABELS[fl]}</div>
-        <div class="fl-kpi-count" style="color:${FL_COLORS[fl]}">${ms.length}</div>
+        <div class="fl-kpi-label" style="color:${FL_COLORS[fl]}">${FL_KPI_LABELS[fl]}</div>
+        <div class="fl-kpi-count" style="color:${FL_COLORS[fl]}">${pct}%</div>
         <div class="fl-kpi-hours">${h} h/Monat</div>
       </div>`;
     }).join("");

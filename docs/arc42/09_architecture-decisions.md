@@ -6,4 +6,5 @@ Alle Entscheidungen liegen als ADRs in [docs/adr/](../adr/), eine Datei pro Ents
 - [0002 – Drei Script-Blöcke und Safari-Schreibregeln](../adr/0002-drei-script-bloecke-safari.md)
 - [0003 – Das Tool diagnostiziert, es repariert nicht](../adr/0003-diagnostizieren-statt-reparieren.md)
 - [0004 – Keine Resolver-Liste für Gruppenplatzhalter](../adr/0004-keine-resolver-liste-fuer-gruppenplatzhalter.md)
-- [0005 – Zwei Remotes: origin und public-Spiegel](../adr/0005-zwei-remotes-mit-public-spiegel.md)
+- [0005 – Zwei Remotes: origin und public-Spiegel](../adr/0005-zwei-remotes-mit-public-spiegel.md) *(abgelöst durch 0006)*
+- [0006 – Origin (braunle77) kanonisch, colenet-fork manuell nachgezogen](../adr/0006-origin-kanonisch-colenet-fork-manueller-sync.md)

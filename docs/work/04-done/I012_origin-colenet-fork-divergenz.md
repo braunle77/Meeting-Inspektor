@@ -2,7 +2,7 @@
 id: I012
 type: chore
 title: origin und colenet-fork sind auseinandergelaufen, Auto-Mirror fehlt
-status: backlog
+status: done
 ---
 
 ## Problem
@@ -36,3 +36,17 @@ Entdeckt am 27.07.2026 beim Mergen von PR #1 (F001-Nachfolge) auf `colenet-gmbh/
 
 - Keine destruktiven Git-Operationen (Force-Push, History-Rewrite) ohne Rücksprache mit
   Leiv – beide Remotes enthalten unabhängig entstandene Commits.
+
+## Lösung (28.07.2026)
+
+`braunle77` ist tatsächlich der kanonische Origin (siehe Commit-Message von #30).
+`colenet-fork` bleibt ein echter Fork mit Org-Rechten, kein automatischer Mirror mehr.
+
+- Divergenz per Merge aufgelöst (kein Force-Push): `origin/main` (LICENSE #30) und
+  lokaler `main` (PRs #1/#2) zu einem gemeinsamen `main` gemergt, nach `origin` gepusht,
+  danach `colenet-fork/main` per Fast-Forward nachgezogen.
+- Seither Konvention: nach jedem PR-Merge nach `origin/main` zusätzlich
+  `git push colenet-fork main:main`.
+- Dokumentiert in [ADR 0006](../../adr/0006-origin-kanonisch-colenet-fork-manueller-sync.md)
+  (löst ADR 0005 ab) und `CLAUDE_CONTEXT.md` nachgezogen.
+- README-Downloadlinks auf `braunle77` umgestellt.

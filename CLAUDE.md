@@ -19,3 +19,8 @@ in Organisationen. Keine Server, kein Build-Prozess, vollständig offline-fähig
 
 ## Stack
 HTML · Vanilla JavaScript · Plotly · D3
+
+## Orientation
+
+Read `CONTEXT.md` to locate central project files and directories unknown to you.
+A "handoff" is a document that contains essential further guidance for you. Look for it in the handoff-dir. Read it first.

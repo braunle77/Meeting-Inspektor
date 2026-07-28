@@ -1,5 +1,8 @@
 # Zwei Remotes: origin (colenet-gmbh) und public-Spiegel (braunle77)
 
+**Status:** abgelöst durch [0006](0006-origin-kanonisch-colenet-fork-manueller-sync.md) (seit 27./28.07.2026) –
+unten stehende Beschreibung ist historisch, nicht mehr aktueller Stand.
+
 Entwicklung läuft über `origin` (github.com/colenet-gmbh/Meeting-Inspektor, PRs und
 Merges). Zusätzlich existiert `public` (github.com/braunle77/Meeting-Inspektor, trotz des
 Namens ein privates Repo) als Spiegel: Der Kunde lädt die HTML-Datei per Browser von dort

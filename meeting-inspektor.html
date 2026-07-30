@@ -669,7 +669,7 @@ textarea#paste-area::placeholder{color:#cbd5e1}
 // FK_LIST    : Führungskräfte (Stern im Netzwerk); [] = keine Hervorhebung
 // PERSON_SUBTEAM : optionale Subteam-Zuordnung für Hover-Texte
 // ══════════════════════════════════════════════════════════════════════════════
-const APP_VERSION = "28.07.2026 17:02";
+const APP_VERSION = "29.07.2026 19:08";
 const ALLOWED_FILE_EXTENSIONS = ['.csv', '.tsv', '.txt'];
 const ALLOWED_FILE_MIME_TYPES  = ['text/csv', 'text/tab-separated-values', 'text/plain'];
 const ALIAS_MAP = {
@@ -1517,8 +1517,8 @@ const TAB_INFO = {
        folgefragen: "Welche Meeting-Kategorie verschlingt die meiste Organisationszeit? Stimmt dieses Verhältnis mit der strategischen Priorität überein?" },
   8: { title: "Wirkungsmatrix",
        was: "X = Zeitaufwand h/Monat, Y = empfundene Wirkung (1–4). Bubble-Größe = Teilnehmerzahl. Wirkung kann in Tab 'Alle Meetings' eingetragen werden.",
-       achten: "Rechts unten = viel Zeit, wenig Wirkung → 'Optimieren'. Links oben = wenig Zeit, hohe Wirkung → 'Bereichernd'. Rechts oben = 'Effizient halten'.",
-       folgefragen: "Welche Meetings liegen im Optimieren-Quadranten? Können sie gekürzt, seltener abgehalten oder abgeschafft werden?" },
+       achten: "Rechts unten = viel Zeit, wenig Wirkung → 'Neu gestalten'. Links oben = wenig Zeit, hohe Wirkung → 'So weiterführen'. Rechts oben = 'Zeitaufwand optimieren'.",
+       folgefragen: "Welche Meetings liegen im 'Neu gestalten'-Quadranten? Können sie gekürzt, seltener abgehalten oder abgeschafft werden?" },
   9: { title: "Alle Meetings (Tabelle)",
        was: "Vollständige Datentabelle aller Meetings mit Echtzeit-Suche und Filter. Read-only Ansicht – alle Werte kommen aus der Urliste.",
        achten: "Meetings ohne Wirkungsbewertung fehlen in der Wirkungsmatrix. Nutze die Suche, um alle Meetings einer Person oder Abteilung zu finden.",
@@ -3547,10 +3547,10 @@ function renderWirkungsMatrix() {
   const xMax = Math.max.apply(null, xVals) * 1.15 || 10;
 
   const annotations = [
-    { x: xMedian/2,          y: 3.6, text: "Bereichernd",     font: { color: "#059669", size: 11 } },
-    { x: (xMedian+xMax)/2,   y: 3.6, text: "Effizient halten",font: { color: "#2563eb", size: 11 } },
-    { x: xMedian/2,          y: 1.4, text: "Hinterfragen",    font: { color: "#9ca3af", size: 11 } },
-    { x: (xMedian+xMax)/2,   y: 1.4, text: "Optimieren",      font: { color: "#dc2626", size: 11 } },
+    { x: xMedian/2,          y: 3.6, text: "So weiterführen",       font: { color: "#059669", size: 11 } },
+    { x: (xMedian+xMax)/2,   y: 3.6, text: "Zeitaufwand optimieren",font: { color: "#2563eb", size: 11 } },
+    { x: xMedian/2,          y: 1.4, text: "Sinn hinterfragen",     font: { color: "#9ca3af", size: 11 } },
+    { x: (xMedian+xMax)/2,   y: 1.4, text: "Neu gestalten",         font: { color: "#dc2626", size: 11 } },
   ].map(function(a){ return Object.assign({}, a, { xref:"x", yref:"y", showarrow:false, font: Object.assign({}, a.font, {family:"inherit"}), opacity:0.6 }); });
 
   const shapes = [
@@ -3632,13 +3632,13 @@ function _renderWirkungsBriefing(data, xVals, xMedian) {
   var moreOpt = optimieren.length > 4 ? '<div style="font-size:.75rem;color:#9ca3af;padding:2px 0 0 24px">+ ' + (optimieren.length-4) + ' weitere</div>' : '';
 
   var leftCol = '<div>'
-    + '<div style="font-size:.75rem;font-weight:700;color:#dc2626;margin-bottom:4px">⚠ OPTIMIEREN (' + optimieren.length + ')</div>'
+    + '<div style="font-size:.75rem;font-weight:700;color:#dc2626;margin-bottom:4px">⚠ NEU GESTALTEN (' + optimieren.length + ')</div>'
     + '<div style="font-size:.72rem;color:#9ca3af;margin-bottom:6px">Hoher Zeitaufwand · Wirkung ≤ 2</div>'
     + (optimieren.length ? optRows + moreOpt : '<div style="font-size:.8rem;color:#059669;padding:4px 0">✓ Keine kritischen Meetings</div>')
     + '</div>';
 
   var rightCol = '<div>'
-    + '<div style="font-size:.75rem;font-weight:700;color:#6b7280;margin-bottom:4px">? HINTERFRAGEN (' + hinterfragen.length + ')</div>'
+    + '<div style="font-size:.75rem;font-weight:700;color:#6b7280;margin-bottom:4px">? SINN HINTERFRAGEN (' + hinterfragen.length + ')</div>'
     + '<div style="font-size:.72rem;color:#9ca3af;margin-bottom:6px">Geringer Zeitaufwand · Wirkung ≤ 2</div>'
     + (hinterfragen.length
       ? hinterfragen.slice(0,5).map(function(d){
@@ -4098,7 +4098,7 @@ function _computeOrgSignale(nameLower, allEntries) {
   var ownAsResp = allEntries.filter(function(e){ return e.rolle === 'V'; }).map(function(e){ return e.m; });
   var signale = [];
 
-  // 1) Eigene Meetings im Optimieren-/Hinterfragen-Quadranten – wie Wirkungsmatrix (Tab 8)
+  // 1) Eigene Meetings im „Neu gestalten"-/„Sinn hinterfragen"-Quadranten – wie Wirkungsmatrix (Tab 8)
   var aktiveAlle = MEETINGS.filter(function(m){ return !m.ist_platzhalter; });
   var alleWirkung = aktiveAlle.filter(function(m){ return m.dauer !== null && m.wert !== null; });
   if (alleWirkung.length) {
@@ -4119,7 +4119,7 @@ function _computeOrgSignale(nameLower, allEntries) {
     if (ownOptimieren.length) {
       signale.push({
         st: STATUS_KRITISCH,
-        label: ownOptimieren.length + ' Meeting' + (ownOptimieren.length===1?'':'s') + ' im Optimieren-Quadranten',
+        label: ownOptimieren.length + ' Meeting' + (ownOptimieren.length===1?'':'s') + ' im „Neu gestalten"-Quadranten',
         detail: ownOptimieren.slice(0,3).map(function(m){ return '"' + escapeHtml(m.name) + '"'; }).join(', ') + (ownOptimieren.length>3?' u.a.':'') + ' – hoher Zeitaufwand, Wirkung ≤ 2 (deine eigenen Meetings). Redesign oder Abschaffung prüfen.',
         tabIdx: 8, tabLabel: 'Wirkung', basisNote: quadrantBasis
       });
@@ -4127,7 +4127,7 @@ function _computeOrgSignale(nameLower, allEntries) {
     if (ownHinterfragen.length) {
       signale.push({
         st: STATUS_PRUEFEN,
-        label: ownHinterfragen.length + ' Meeting' + (ownHinterfragen.length===1?'':'s') + ' im Hinterfragen-Quadranten',
+        label: ownHinterfragen.length + ' Meeting' + (ownHinterfragen.length===1?'':'s') + ' im „Sinn hinterfragen"-Quadranten',
         detail: ownHinterfragen.slice(0,3).map(function(m){ return '"' + escapeHtml(m.name) + '"'; }).join(', ') + (ownHinterfragen.length>3?' u.a.':'') + ' – geringer Zeitaufwand, aber Wirkung ≤ 2 (deine eigenen Meetings). Mehrwert prüfen.',
         tabIdx: 8, tabLabel: 'Wirkung', basisNote: quadrantBasis
       });
